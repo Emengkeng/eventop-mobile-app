@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "@privy-io/expo-starter",
+    "name": "EvenTop",
     "slug": "expo-starter",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "icon": "./assets/images/icon.jpg",
+    "scheme": "eventop",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/images/splash.png",
@@ -15,8 +15,8 @@
     "ios": {
       "usesAppleSignIn": true,
       "supportsTablet": true,
-      "bundleIdentifier": "dev.privy.example",
-      "associatedDomains": ["webcredentials:<your-associated-domain>"],
+      "bundleIdentifier": "dev.eventop.wallet",
+      "associatedDomains": ["webcredentials:eventop.xyz"],
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
@@ -28,12 +28,12 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "dev.privy.example"
+      "package": "dev.eventop.wallet"
     },
     "extra": {
-      "privyAppId": "<your-privy-app-id>",
-      "privyClientId": "<your-privy-app-client-id>",
-      "passkeyAssociatedDomain": "https://<your-associated-domain>"
+      "privyAppId": "cmi91u7ca00csl20dktx7r3cr",
+      "privyClientId": "client-WY6TC6KG4fD76kZaKeFdzimsWXyNSnRvgjMdeJS2H8p2d",
+      "passkeyAssociatedDomain": "https://eventop.xyz"
     },
     "plugins": [
       "expo-router",
