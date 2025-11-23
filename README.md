@@ -16,7 +16,7 @@ mkdir -p privy-expo-starter && curl -L https://github.com/privy-io/privy-example
 npm install
 ```
 
-### 3. Configure Environment
+### 3. Configure Enviroment
 
 Update the `app.json` file with your Privy app credentials:
 
@@ -74,7 +74,7 @@ const { user } = usePrivy();
 
 ### 2. Create Multi-Chain Wallets
 
-Programmatically create embedded wallets for multiple blockchains. Supports Ethereum, Solana, Bitcoin, and more.
+nProgrammatically create embedded wallets for multiple blockchains. Supports Ethereum, Solana, Bitcoin, and more.
 
 [`components/userManagement/Wallets.tsx`](./components/userManagement/Wallets.tsx)
 
