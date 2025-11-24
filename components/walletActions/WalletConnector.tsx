@@ -29,7 +29,7 @@ export const WalletConnector: React.FC<WalletConnectorProps> = ({
     isConnected,
   } = usePhantomDeeplinkWalletConnector({
     appUrl: 'https://eventop.xyz',
-    redirectUri: redirectUri || '/wallet/deposit',
+    redirectUri: redirectUri || 'eventop://wallet/deposit',
   });
 
   const [loading, setLoading] = React.useState(false);
@@ -108,7 +108,7 @@ export const WalletConnector: React.FC<WalletConnectorProps> = ({
 export const useWalletConnection = (redirectUri?: string) => {
   return usePhantomDeeplinkWalletConnector({
     appUrl: 'https://yourdapp.com',
-    redirectUri: redirectUri || '/wallet/deposit',
+    redirectUri: redirectUri || 'eventop://wallet/deposit',
   });
 };
 
