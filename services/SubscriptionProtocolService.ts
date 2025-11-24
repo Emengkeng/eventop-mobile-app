@@ -14,10 +14,9 @@ import {
 import { BN, Program, AnchorProvider, Idl } from '@coral-xyz/anchor';
 import { APP_CONFIG } from '@/config/app';
 
-// Your deployed program ID
-const PROGRAM_ID = new PublicKey(APP_CONFIG.PROGRAM_ID);
+const PROGRAM_ID = new PublicKey('BfvARc8RoHQ64quvHh2X6mSDMwFzxrzWM8HDCmdfbnKt');
 
-const USDC_MINT = new PublicKey(APP_CONFIG.USDC_MINT);
+const USDC_MINT = new PublicKey('Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr');
 
 export interface SubscriptionWalletData {
   owner: PublicKey;
@@ -64,7 +63,7 @@ export class SubscriptionProtocolService {
   private usdcMint: PublicKey;
 
   constructor(
-    rpcUrl: string = APP_CONFIG.RPC_URL,
+    rpcUrl: string = APP_CONFIG.RPC_URL || 'https://api.devnet.solana.com',
     programId: string = PROGRAM_ID.toString(),
     usdcMint: string = USDC_MINT.toString()
   ) {
