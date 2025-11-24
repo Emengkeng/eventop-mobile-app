@@ -8,6 +8,7 @@ import { typography } from '@/theme/typography';
 import { spacing } from '@/theme/spacing';
 import { radius } from '@/theme/radius';
 import { Wallet as WalletIcon } from 'lucide-react-native';
+import { APP_CONFIG } from '@/config/app';
 
 interface WalletConnectorProps {
   onConnected?: (address: string) => void;
@@ -28,7 +29,7 @@ export const WalletConnector: React.FC<WalletConnectorProps> = ({
     disconnect,
     isConnected,
   } = usePhantomDeeplinkWalletConnector({
-    appUrl: 'https://eventop.xyz',
+    appUrl: APP_CONFIG.APP_URL,
     redirectUri: redirectUri || 'eventop://wallet/deposit',
   });
 
@@ -107,7 +108,7 @@ export const WalletConnector: React.FC<WalletConnectorProps> = ({
 
 export const useWalletConnection = (redirectUri?: string) => {
   return usePhantomDeeplinkWalletConnector({
-    appUrl: 'https://yourdapp.com',
+    appUrl: APP_CONFIG.APP_URL,
     redirectUri: redirectUri || 'eventop://wallet/deposit',
   });
 };
