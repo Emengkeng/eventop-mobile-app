@@ -13,7 +13,7 @@ import { APP_CONFIG } from '@/config/app';
 /**
  * Hook for managing subscription wallet operations
  */
-export function useSubscriptionWallet(userPublicKey?: string) {
+export function useSubscriptionWallet(userPublicKey?: string, redirectUri?: string) {
   const [walletPDA, setWalletPDA] = useState<string | null>(null);
   const [walletData, setWalletData] = useState<SubscriptionWalletData | null>(null);
   const [balance, setBalance] = useState<number>(0);
@@ -25,7 +25,7 @@ export function useSubscriptionWallet(userPublicKey?: string) {
     signAndSendTransaction,
   } = usePhantomDeeplinkWalletConnector({
     appUrl: APP_CONFIG.APP_URL,
-    redirectUri: '/wallet',
+    redirectUri: redirectUri || '/wallet',
   });
 
   // Derive and fetch wallet PDA

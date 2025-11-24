@@ -30,7 +30,7 @@ export default function DepositScreen() {
     loading: walletLoading,
     deposit,
     createWallet,
-  } = useSubscriptionWallet(address || undefined);
+  } = useSubscriptionWallet(address || undefined, "/wallet/deposit");
 
   const [amount, setAmount] = React.useState('');
   const [loading, setLoading] = React.useState(false);
