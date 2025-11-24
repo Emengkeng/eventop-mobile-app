@@ -9,7 +9,7 @@ import {
   // useLinkWithFarcaster,
 } from '@privy-io/expo';
 import { useLinkWithPasskey } from '@privy-io/expo/passkey';
-import { Github, Mail, Phone, Key } from 'lucide-react-native';
+import { Github, Mail, Phone, Key, CheckCircle2 } from 'lucide-react-native';
 import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { spacing } from '@/theme/spacing';
@@ -116,9 +116,19 @@ export default function LinkAccounts() {
     'twitter',
   ] as const;
 
+  const emailprovider = [
+    'email',
+  ] as const;
+
   const isLinked = (provider: string) => {
     return user?.linked_accounts.find(
       (account: any) => (account as any).type === `${provider}_oauth`
+    ) !== undefined;
+  };
+
+  const isLinkedEmail = () => {
+    return user?.linked_accounts.find(
+      (account: any) => (account as any).type === `email`
     ) !== undefined;
   };
 
@@ -218,34 +228,48 @@ export default function LinkAccounts() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Email</Text>
           <Card>
-            <View style={styles.formContent}>
-              <Input
-                value={email}
-                onChangeText={setEmail}
-                placeholder="Enter your email"
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-              {!emailCodeSent ? (
-                <Button onPress={() => sendCodeEmail({ email })}>
-                  Send Code
-                </Button>
-              ) : (
-                <>
-                  <Input
-                    value={emailCode}
-                    onChangeText={setEmailCode}
-                    placeholder="Enter verification code"
-                    keyboardType="number-pad"
-                  />
-                  <Button
-                    onPress={() => linkWithCodeEmail({ code: emailCode, email })}
-                  >
-                    Verify Email
-                  </Button>
-                </>
-              )}
-            </View>
+            { emailprovider.map((emailprovider, index) => {
+              const linked = isLinkedEmail();
+              return(  
+                <View style={styles.formContent}>
+                  { linked ? (<>
+                    <CheckCircle2
+                        size={14}
+                        color={colors.success}
+                      />
+                      <Text style={styles.statusLinked}>Connected</Text>
+                  </>
+                  ) : (<>
+                    <Input
+                        value={email}
+                        onChangeText={setEmail}
+                        placeholder="Enter your email"
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                      />
+                  </>)}
+                  {!emailCodeSent ? (
+                    <Button onPress={() => sendCodeEmail({ email })}>
+                      Send Code
+                    </Button>
+                  ) : (
+                    <>
+                      <Input
+                        value={emailCode}
+                        onChangeText={setEmailCode}
+                        placeholder="Enter verification code"
+                        keyboardType="number-pad"
+                      />
+                      <Button
+                        onPress={() => linkWithCodeEmail({ code: emailCode, email })}
+                      >
+                        Verify Email
+                      </Button>
+                    </>
+                  )}
+                </View>
+              );
+            })}
           </Card>
         </View>
 
@@ -346,6 +370,10 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  statusLinked: {
+    ...typography.small,
+    color: colors.success,
   },
   providerItem: {
     flexDirection: 'row',
