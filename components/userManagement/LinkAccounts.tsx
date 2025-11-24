@@ -4,6 +4,7 @@ import Constants from 'expo-constants';
 import {
   useLinkWithOAuth,
   useLinkEmail,
+  usePrivy,
   // useLinkSMS,
   // useLinkWithFarcaster,
 } from '@privy-io/expo';
@@ -37,6 +38,7 @@ export default function LinkAccounts() {
   const [smsCode, setSmsCode] = useState('');
   const [emailCodeSent, setEmailCodeSent] = useState(false);
   const [smsCodeSent, setSmsCodeSent] = useState(false);
+  const { user } = usePrivy();
 
   // const { linkWithFarcaster } = useLinkWithFarcaster({
   //   onSuccess: () => {
@@ -114,6 +116,12 @@ export default function LinkAccounts() {
     'twitter',
   ] as const;
 
+  const isLinked = (provider: string) => {
+    return user?.linked_accounts.find(
+      (account: any) => (account as any).type === `${provider}_oauth`
+    ) !== undefined;
+  };
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
@@ -126,37 +134,51 @@ export default function LinkAccounts() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Social Accounts</Text>
           <Card noPadding>
-            {providers.map((provider, index) => (
-              <View
-                key={provider}
-                style={[
-                  styles.providerItem,
-                  index === providers.length - 1 && styles.lastItem,
-                ]}
-              >
-                <View style={styles.providerInfo}>
-                  <View style={styles.iconContainer}>
-                    {React.createElement(providerIcons[provider] || Mail, {
-                      size: 20,
-                      color: colors.foreground,
-                    })}
+            {providers.map((provider, index) => {
+              const linked = isLinked(provider);
+              return (
+                <View
+                  key={provider}
+                  style={[
+                    styles.providerItem,
+                    index === providers.length - 1 && styles.lastItem,
+                  ]}
+                >
+                  <View style={styles.providerInfo}>
+                    <View style={styles.iconContainer}>
+                      {React.createElement(providerIcons[provider] || Mail, {
+                        size: 20,
+                        color: linked ? colors.success : colors.foreground,
+                      })}
+                    </View>
+                    <Text style={styles.providerName}>
+                      {provider.charAt(0).toUpperCase() + provider.slice(1)}
+                    </Text>
                   </View>
-                  <Text style={styles.providerName}>
-                    {provider.charAt(0).toUpperCase() + provider.slice(1)}
-                  </Text>
+                  <View style={styles.buttonContainer}>
+                    {linked ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled
+                      >
+                        Connected
+                      </Button>
+                    ) : (<>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={oauth.state.status === 'loading'}
+                        onPress={() => oauth.link({ provider })}
+                      >
+                        Connect
+                      </Button>
+                    </>)}
+                    
+                  </View>
                 </View>
-                <View style={styles.buttonContainer}>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={oauth.state.status === 'loading'}
-                    onPress={() => oauth.link({ provider })}
-                  >
-                    Connect
-                  </Button>
-                </View>
-              </View>
-            ))}
+              );
+            })}
           </Card>
         </View>
 
