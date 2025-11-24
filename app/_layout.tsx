@@ -1,11 +1,13 @@
 import { PRIVY_CONFIG } from '@/config/privy';
 import { useWalletStore } from '@/store/walletStore';
-import { PrivyProvider } from '@privy-io/expo';
+import { PrivyProvider, usePrivy } from '@privy-io/expo';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React from 'react';
+import React, { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import { colors } from '@/theme/colors';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -17,11 +19,38 @@ const queryClient = new QueryClient({
 });
 
 function RootNavigator() {
+  const { isReady, user } = usePrivy();
   const hydrate = useWalletStore((state) => state.hydrate);
+  const segments = useSegments();
+  const router = useRouter();
 
-  React.useEffect(() => {
+  useEffect(() => {
     hydrate();
   }, []);
+
+  useEffect(() => {
+    if (!isReady) return;
+
+    const inAuthGroup = segments[0] === 'auth';
+    const inTabsGroup = segments[0] === '(tabs)';
+
+    if (!user && !inAuthGroup) {
+      // User is not authenticated and trying to access protected routes
+      router.replace('/auth/login');
+    } else if (user && inAuthGroup) {
+      // User is authenticated but on auth pages, redirect to home
+      router.replace('/(tabs)');
+    }
+  }, [isReady, user, segments]);
+
+  // Show loading screen while Privy initializes
+  if (!isReady) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
@@ -52,32 +81,11 @@ export default function RootLayout() {
   );
 }
 
-// import Constants from "expo-constants";
-// import { Stack } from "expo-router";
-// import { PrivyProvider } from "@privy-io/expo";
-// import { PrivyElements } from "@privy-io/expo/ui";
-// import {
-//   Inter_400Regular,
-//   Inter_500Medium,
-//   Inter_600SemiBold,
-// } from "@expo-google-fonts/inter";
-// import { useFonts } from "expo-font";
-
-// export default function RootLayout() {
-//   useFonts({
-//     Inter_400Regular,
-//     Inter_500Medium,
-//     Inter_600SemiBold,
-//   });
-//   return (
-//     <PrivyProvider
-//       appId={Constants.expoConfig?.extra?.privyAppId}
-//       clientId={Constants.expoConfig?.extra?.privyClientId}
-//     >
-//       <Stack>
-//         <Stack.Screen name="index" />
-//       </Stack>
-//       <PrivyElements />
-//     </PrivyProvider>
-//   );
-// }
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.background,
+  },
+});
