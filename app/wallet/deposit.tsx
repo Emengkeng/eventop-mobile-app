@@ -13,11 +13,13 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { WalletConnector, useWalletConnection } from '@/components/walletActions/WalletConnector';
 import { useSubscriptionWallet } from '@/hooks/useSubscriptionProtocol';
+import { usePathname } from 'expo-router';
 
 export default function DepositScreen() {
   const router = useRouter();
   const { user } = usePrivy();
   const { address, isConnected } = useWalletConnection();
+  const pathname = usePathname();
   
   const {
     walletPDA,
@@ -99,7 +101,7 @@ export default function DepositScreen() {
 
       <ScrollView contentContainerStyle={styles.content}>
         {/* Wallet Connection */}
-        <WalletConnector />
+        <WalletConnector redirectUri="/wallet/deposit" />
 
         {/* Create Subscription Wallet (if needed) */}
         {isConnected && !hasWallet && (
