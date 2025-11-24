@@ -42,10 +42,31 @@ export function useSubscriptionWallet(userPublicKey?: string) {
       const [pda] = await subscriptionService.findSubscriptionWalletPDA(
         new PublicKey(userPublicKey)
       );
-      setWalletPDA(pda.toString());
-      await fetchWalletData(pda.toString());
+      
+      // Check if the account actually exists on-chain
+      const data = await subscriptionService.getSubscriptionWallet(pda);
+      
+      if (data) {
+        // Wallet exists
+        setWalletPDA(pda.toString());
+        setWalletData(data);
+        
+        // Fetch balance
+        const bal = await subscriptionService.getWalletBalance(
+          new PublicKey(userPublicKey)
+        );
+        setBalance(bal);
+      } else {
+        // Wallet doesn't exist yet
+        setWalletPDA(null);
+        setWalletData(null);
+        setBalance(0);
+      }
     } catch (error) {
       console.error('Error deriving wallet PDA:', error);
+      setWalletPDA(null);
+      setWalletData(null);
+      setBalance(0);
     }
   };
 
@@ -58,16 +79,25 @@ export function useSubscriptionWallet(userPublicKey?: string) {
       const data = await subscriptionService.getSubscriptionWallet(
         new PublicKey(targetPDA)
       );
-      setWalletData(data);
+      
+      if (data) {
+        setWalletData(data);
 
-      if (userPublicKey) {
-        const bal = await subscriptionService.getWalletBalance(
-          new PublicKey(userPublicKey)
-        );
-        setBalance(bal);
+        if (userPublicKey) {
+          const bal = await subscriptionService.getWalletBalance(
+            new PublicKey(userPublicKey)
+          );
+          setBalance(bal);
+        }
+      } else {
+        // Account no longer exists or was closed
+        setWalletPDA(null);
+        setWalletData(null);
+        setBalance(0);
       }
     } catch (error) {
       console.error('Error fetching wallet data:', error);
+      // Don't clear state on error - might be network issue
     } finally {
       setRefreshing(false);
     }
