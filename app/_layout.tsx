@@ -8,6 +8,7 @@ import React, { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { colors } from '@/theme/colors';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -19,7 +20,7 @@ const queryClient = new QueryClient({
 });
 
 function RootNavigator() {
-  const { isReady, user } = usePrivy();
+  const { isReady, user, logout } = usePrivy();
   const hydrate = useWalletStore((state) => state.hydrate);
   const segments = useSegments();
   const router = useRouter();
@@ -27,6 +28,17 @@ function RootNavigator() {
   useEffect(() => {
     hydrate();
   }, []);
+
+  useEffect(() => {
+    const checkForFreshInstall = async () => {
+      const hasLaunchedBefore = await AsyncStorage.getItem('hasLaunchedBefore');
+      if (!hasLaunchedBefore) {
+        await AsyncStorage.setItem('hasLaunchedBefore', 'true');
+        await logout();
+      }
+    };
+    checkForFreshInstall();
+  }, [logout]);
 
   useEffect(() => {
     if (!isReady) return;

@@ -6,6 +6,7 @@ import {
   subscriptionService,
   SubscriptionWalletData,
   SubscriptionStateData,
+  getSubscriptionService,
 } from '@/services/SubscriptionProtocolService';
 import { APP_CONFIG } from '@/config/app';
 
@@ -18,6 +19,7 @@ export function useSubscriptionWallet(userPublicKey?: string) {
   const [balance, setBalance] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
 
   const {
     signAndSendTransaction,

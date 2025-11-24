@@ -630,4 +630,13 @@ export class SubscriptionProtocolService {
   }
 }
 
-export const subscriptionService = new SubscriptionProtocolService();
+let _subscriptionService: SubscriptionProtocolService | null = null;
+
+export const getSubscriptionService = () => {
+  if (!_subscriptionService) {
+    _subscriptionService = new SubscriptionProtocolService();
+  }
+  return _subscriptionService;
+};
+
+export const subscriptionService = getSubscriptionService();
