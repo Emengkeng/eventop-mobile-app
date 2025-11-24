@@ -229,47 +229,50 @@ export default function LinkAccounts() {
           <Text style={styles.sectionTitle}>Email</Text>
           <Card>
             { emailprovider.map((emailprovider, index) => {
-              const linked = isLinkedEmail();
-              return(  
-                <View style={styles.formContent}>
-                  { linked ? (<>
-                    <CheckCircle2
-                        size={14}
-                        color={colors.success}
-                      />
-                      <Text style={styles.statusLinked}>Connected</Text>
-                  </>
-                  ) : (<>
-                    <Input
-                        value={email}
-                        onChangeText={setEmail}
-                        placeholder="Enter your email"
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                      />
-                  </>)}
-                  {!emailCodeSent ? (
-                    <Button onPress={() => sendCodeEmail({ email })}>
-                      Send Code
-                    </Button>
-                  ) : (
-                    <>
-                      <Input
-                        value={emailCode}
-                        onChangeText={setEmailCode}
-                        placeholder="Enter verification code"
-                        keyboardType="number-pad"
-                      />
-                      <Button
-                        onPress={() => linkWithCodeEmail({ code: emailCode, email })}
-                      >
-                        Verify Email
-                      </Button>
-                    </>
-                  )}
-                </View>
-              );
-            })}
+                const linked = isLinkedEmail();
+                return (
+                  <View style={styles.formContent}>
+                    {linked ? (
+                      <>
+                        <CheckCircle2
+                          size={14}
+                          color={colors.success}
+                        />
+                        <Text style={styles.statusLinked}>Connected</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Input
+                          value={email}
+                          onChangeText={setEmail}
+                          placeholder="Enter your email"
+                          keyboardType="email-address"
+                          autoCapitalize="none"
+                        />
+                        {!emailCodeSent ? (
+                          <Button onPress={() => sendCodeEmail({ email })}>
+                            Send Code
+                          </Button>
+                        ) : (
+                          <>
+                            <Input
+                              value={emailCode}
+                              onChangeText={setEmailCode}
+                              placeholder="Enter verification code"
+                              keyboardType="number-pad"
+                            />
+                            <Button
+                              onPress={() => linkWithCodeEmail({ code: emailCode, email })}
+                            >
+                              Verify Email
+                            </Button>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </View>
+                );
+              })}
           </Card>
         </View>
 

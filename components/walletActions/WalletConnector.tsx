@@ -29,7 +29,7 @@ export const WalletConnector: React.FC<WalletConnectorProps> = ({
     disconnect,
     isConnected,
   } = usePhantomDeeplinkWalletConnector({
-    appUrl: APP_CONFIG.APP_URL,
+    appUrl: APP_CONFIG.APP_URL || 'https://api.devnet.solana.com',
     redirectUri: redirectUri || 'eventop://wallet/deposit',
   });
 
