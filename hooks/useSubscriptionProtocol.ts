@@ -24,7 +24,7 @@ export function useSubscriptionWallet(userPublicKey?: string, redirectUri?: stri
   const {
     signAndSendTransaction,
   } = usePhantomDeeplinkWalletConnector({
-    appUrl: APP_CONFIG.APP_URL,
+    appUrl: APP_CONFIG.APP_URL || 'https://api.devnet.solana.com',
     redirectUri: redirectUri || '/wallet',
   });
 
@@ -111,11 +111,21 @@ export function useSubscriptionWallet(userPublicKey?: string, redirectUri?: stri
 
     setLoading(true);
     try {
+      console.log('🔨 Building transaction...');
       const transaction = await subscriptionService.createSubscriptionWallet(
         new PublicKey(userPublicKey)
       );
 
+      console.log('📝 Transaction built:', {
+        feePayer: transaction.feePayer?.toString(),
+        recentBlockhash: transaction.recentBlockhash,
+        instructionCount: transaction.instructions.length,
+      });
+
+      console.log('📱 Opening Phantom wallet...');
       const signature = await signAndSendTransaction(transaction);
+
+      console.log('✅ Transaction signed:', signature);
 
       Alert.alert('Success', 'Subscription wallet created successfully!');
       
@@ -227,7 +237,7 @@ export function useSubscriptions(userPublicKey?: string) {
   const {
     signAndSendTransaction,
   } = usePhantomDeeplinkWalletConnector({
-    appUrl: APP_CONFIG.APP_URL,
+    appUrl: APP_CONFIG.APP_URL || 'https://api.devnet.solana.com',
     redirectUri: '/subscriptions',
   });
 
