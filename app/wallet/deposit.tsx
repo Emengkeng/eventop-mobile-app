@@ -4,9 +4,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, ExternalLink } from 'lucide-react-native';
 import { usePrivy } from '@privy-io/expo';
-import { usePhantomDeeplinkWalletConnector } from '@privy-io/expo/connectors';
-import { Connection, PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { TOKEN_PROGRAM_ID, createTransferInstruction, getAssociatedTokenAddress, createAssociatedTokenAccountInstruction } from '@solana/spl-token';
 import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { spacing } from '@/theme/spacing';
@@ -14,31 +11,39 @@ import { radius } from '@/theme/radius';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { useWalletStore } from '@/store/walletStore';
-import { WalletConnector } from '@/components/walletActions/WalletConnector';
-
-const USDC_MINT = new PublicKey('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'); // Mainnet
-// const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU'); // Devnet
-
-const RPC_URL = 'https://api.devnet.solana.com';
+import { WalletConnector, useWalletConnection } from '@/components/walletActions/WalletConnector';
+import { useSubscriptionWallet } from '@/hooks/useSubscriptionProtocol';
 
 export default function DepositScreen() {
   const router = useRouter();
   const { user } = usePrivy();
-  const { subscriptionWalletPda } = useWalletStore();
+  const { address, isConnected } = useWalletConnection();
   
   const {
-    address,
-    isConnected,
-    signAndSendTransaction,
-  } = usePhantomDeeplinkWalletConnector({
-    appUrl: 'https://eventop.xyz',
-    redirectUri: '/deposit',
-  });
+    walletPDA,
+    balance,
+    loading: walletLoading,
+    deposit,
+    createWallet,
+  } = useSubscriptionWallet(address || undefined);
 
   const [amount, setAmount] = React.useState('');
   const [loading, setLoading] = React.useState(false);
-  const [connection] = React.useState(() => new Connection(RPC_URL, 'confirmed'));
+
+  // Check if subscription wallet exists
+  const hasWallet = !!walletPDA;
+
+  const handleCreateWallet = async () => {
+    setLoading(true);
+    try {
+      const success = await createWallet();
+      if (success) {
+        Alert.alert('Success', 'Subscription wallet created! You can now deposit funds.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleDeposit = async () => {
     if (!isConnected || !address) {
@@ -46,8 +51,8 @@ export default function DepositScreen() {
       return;
     }
 
-    if (!subscriptionWalletPda) {
-      Alert.alert('Error', 'Subscription wallet not initialized');
+    if (!hasWallet) {
+      Alert.alert('Error', 'Please create a subscription wallet first');
       return;
     }
 
@@ -66,80 +71,12 @@ export default function DepositScreen() {
           onPress: async () => {
             setLoading(true);
             try {
-              const fromPubkey = new PublicKey(address);
-              const toPubkey = new PublicKey(subscriptionWalletPda);
-
-              // Convert USDC amount to smallest unit (6 decimals)
-              const amountInSmallestUnit = Math.floor(parseFloat(amount) * 1_000_000);
-
-              // Get associated token accounts
-              const fromTokenAccount = await getAssociatedTokenAddress(
-                USDC_MINT,
-                fromPubkey
-              );
-
-              const toTokenAccount = await getAssociatedTokenAddress(
-                USDC_MINT,
-                toPubkey
-              );
-
-              // Check if destination token account exists
-              const toAccountInfo = await connection.getAccountInfo(toTokenAccount);
-
-              // Create transaction
-              const transaction = new Transaction();
-              const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('finalized');
-
-              transaction.recentBlockhash = blockhash;
-              transaction.lastValidBlockHeight = lastValidBlockHeight;
-              transaction.feePayer = fromPubkey;
-
-              // If destination token account doesn't exist, create it first
-              if (!toAccountInfo) {
-                transaction.add(
-                  createAssociatedTokenAccountInstruction(
-                    fromPubkey, // payer
-                    toTokenAccount, // associated token account
-                    toPubkey, // owner
-                    USDC_MINT // mint
-                  )
-                );
+              const success = await deposit(parseFloat(amount));
+              if (success) {
+                setAmount('');
+                // Optionally navigate back
+                // router.back();
               }
-
-              // Add transfer instruction
-              transaction.add(
-                createTransferInstruction(
-                  fromTokenAccount,
-                  toTokenAccount,
-                  fromPubkey,
-                  amountInSmallestUnit,
-                  [],
-                  TOKEN_PROGRAM_ID
-                )
-              );
-
-              // Sign and send transaction using Privy
-              const signature = await signAndSendTransaction(transaction);
-
-              Alert.alert(
-                'Success',
-                'Deposit completed successfully!',
-                [
-                  {
-                    text: 'View Transaction',
-                    onPress: () => {
-                      // Open Solana explorer
-                      const explorerUrl = `https://explorer.solana.com/tx/${signature}?cluster=devnet`;
-                      console.log('Transaction:', explorerUrl);
-                    },
-                  },
-                  { text: 'OK', onPress: () => router.back() },
-                ]
-              );
-              setAmount('');
-            } catch (error: any) {
-              console.error('Deposit error:', error);
-              Alert.alert('Error', error.message || 'Deposit failed');
             } finally {
               setLoading(false);
             }
@@ -164,82 +101,118 @@ export default function DepositScreen() {
         {/* Wallet Connection */}
         <WalletConnector />
 
-        {/* Amount Input */}
-        {isConnected && (
+        {/* Create Subscription Wallet (if needed) */}
+        {isConnected && !hasWallet && (
           <Card>
             <View style={styles.cardHeader}>
-              <Text style={styles.cardTitle}>Deposit Amount</Text>
+              <Text style={styles.cardTitle}>Create Subscription Wallet</Text>
             </View>
 
-            <Input
-              label="Amount (USDC)"
-              value={amount}
-              onChangeText={setAmount}
-              placeholder="0.00"
-              keyboardType="decimal-pad"
-              editable={!loading}
-            />
-
-            <View style={styles.quickAmounts}>
-              {['10', '25', '50', '100'].map((quickAmount) => (
-                <TouchableOpacity
-                  key={quickAmount}
-                  style={styles.quickAmountButton}
-                  onPress={() => setAmount(quickAmount)}
-                  disabled={loading}
-                >
-                  <Text style={styles.quickAmountText}>${quickAmount}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <Text style={styles.description}>
+              You need to create a subscription wallet before you can deposit funds. This is a one-time setup.
+            </Text>
 
             <Button
-              onPress={handleDeposit}
-              loading={loading}
-              disabled={loading || !amount || parseFloat(amount) <= 0}
+              onPress={handleCreateWallet}
+              loading={loading || walletLoading}
+              disabled={loading || walletLoading}
             >
-              {amount ? `Deposit $${amount}` : 'Deposit'}
+              Create Subscription Wallet
             </Button>
           </Card>
         )}
 
+        {/* Amount Input */}
+        {isConnected && hasWallet && (
+          <>
+            {/* Current Balance */}
+            <Card>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>Current Balance</Text>
+              </View>
+
+              <View style={styles.balanceContainer}>
+                <Text style={styles.balanceAmount}>${balance.toFixed(2)}</Text>
+                <Text style={styles.balanceLabel}>USDC</Text>
+              </View>
+            </Card>
+
+            {/* Deposit Form */}
+            <Card>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>Deposit Amount</Text>
+              </View>
+
+              <Input
+                label="Amount (USDC)"
+                value={amount}
+                onChangeText={setAmount}
+                placeholder="0.00"
+                keyboardType="decimal-pad"
+                editable={!loading}
+              />
+
+              <View style={styles.quickAmounts}>
+                {['10', '25', '50', '100'].map((quickAmount) => (
+                  <TouchableOpacity
+                    key={quickAmount}
+                    style={styles.quickAmountButton}
+                    onPress={() => setAmount(quickAmount)}
+                    disabled={loading}
+                  >
+                    <Text style={styles.quickAmountText}>${quickAmount}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Button
+                onPress={handleDeposit}
+                loading={loading}
+                disabled={loading || !amount || parseFloat(amount) <= 0}
+              >
+                {amount ? `Deposit $${amount}` : 'Deposit'}
+              </Button>
+            </Card>
+          </>
+        )}
+
         {/* Subscription Wallet Info */}
-        <Card>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Destination</Text>
-          </View>
+        {walletPDA && (
+          <Card>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>Subscription Wallet</Text>
+            </View>
 
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Subscription Wallet</Text>
-            <Text style={styles.infoValue}>
-              {subscriptionWalletPda
-                ? `${subscriptionWalletPda.slice(0, 8)}...${subscriptionWalletPda.slice(-8)}`
-                : 'Not created yet'}
-            </Text>
-          </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Wallet Address</Text>
+              <Text style={styles.infoValue}>
+                {walletPDA.slice(0, 8)}...{walletPDA.slice(-8)}
+              </Text>
+            </View>
 
-          {subscriptionWalletPda && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.viewExplorer}
               onPress={() => {
-                const explorerUrl = `https://explorer.solana.com/address/${subscriptionWalletPda}?cluster=devnet`;
+                const explorerUrl = `https://explorer.solana.com/address/${walletPDA}?cluster=devnet`;
                 console.log('Explorer:', explorerUrl);
+                // You could use Linking.openURL(explorerUrl) here
               }}
             >
               <Text style={styles.viewExplorerText}>View on Explorer</Text>
               <ExternalLink size={16} color={colors.primary} />
             </TouchableOpacity>
-          )}
-        </Card>
+          </Card>
+        )}
 
         {/* Info Box */}
         <View style={styles.infoBox}>
           <Text style={styles.infoTitle}>How it works</Text>
           <Text style={styles.infoText}>
             1. Connect your Phantom wallet{'\n'}
-            2. Enter the amount you want to deposit{'\n'}
-            3. Approve the transaction in your wallet{'\n'}
-            4. Funds will appear in your Subscription Wallet
+            2. Create your subscription wallet (one-time){'\n'}
+            3. Enter the amount you want to deposit{'\n'}
+            4. Approve the transaction in your wallet{'\n'}
+            5. Funds will appear in your Subscription Wallet
           </Text>
         </View>
       </ScrollView>
@@ -281,6 +254,24 @@ const styles = StyleSheet.create({
   cardTitle: {
     ...typography.h4,
     color: colors.foreground,
+  },
+  description: {
+    ...typography.body,
+    color: colors.mutedForeground,
+    marginBottom: spacing.md,
+  },
+  balanceContainer: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+  },
+  balanceAmount: {
+    ...typography.h1,
+    color: colors.foreground,
+    marginBottom: spacing.xs,
+  },
+  balanceLabel: {
+    ...typography.small,
+    color: colors.mutedForeground,
   },
   quickAmounts: {
     flexDirection: 'row',
