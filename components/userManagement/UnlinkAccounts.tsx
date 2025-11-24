@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
-import { usePrivy, useUnlinkOAuth, useUnlinkFarcaster } from '@privy-io/expo';
+import { usePrivy, useUnlinkOAuth } from '@privy-io/expo';
 import { Github, Mail, CheckCircle2, XCircle } from 'lucide-react-native';
 import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
@@ -25,16 +25,16 @@ export default function UnlinkAccounts() {
   const [error, setError] = useState('');
   const { user } = usePrivy();
 
-  const { unlinkFarcaster } = useUnlinkFarcaster({
-    onError: (err) => {
-      console.log(err);
-      setError(err.message);
-    },
-    onSuccess: () => {
-      console.log('Unlink Farcaster success');
-      setError('');
-    },
-  });
+  // const { unlinkFarcaster } = useUnlinkFarcaster({
+  //   onError: (err) => {
+  //     console.log(err);
+  //     setError(err.message);
+  //   },
+  //   onSuccess: () => {
+  //     console.log('Unlink Farcaster success');
+  //     setError('');
+  //   },
+  // });
 
   const oauth = useUnlinkOAuth({
     onError: (err) => {
@@ -47,16 +47,9 @@ export default function UnlinkAccounts() {
   });
 
   const providers = [
-    'github',
     'google',
-    'discord',
-    'apple',
+    // 'apple',
     'twitter',
-    'spotify',
-    'instagram',
-    'tiktok',
-    'linkedin',
-    'line',
   ] as const;
 
   const handleUnlink = (provider: string) => {
@@ -85,28 +78,28 @@ export default function UnlinkAccounts() {
     );
   };
 
-  const handleUnlinkFarcaster = () => {
-    const farcasterAccount = user?.linked_accounts.find(
-      (account: any) => (account as any).type === 'farcaster'
-    ) as any | undefined;
+  // const handleUnlinkFarcaster = () => {
+  //   const farcasterAccount = user?.linked_accounts.find(
+  //     (account: any) => (account as any).type === 'farcaster'
+  //   ) as any | undefined;
 
-    if (!farcasterAccount) return;
+  //   if (!farcasterAccount) return;
 
-    Alert.alert(
-      'Unlink Farcaster',
-      'Are you sure you want to unlink your Farcaster account?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Unlink',
-          style: 'destructive',
-          onPress: () => {
-            unlinkFarcaster({ fid: farcasterAccount.fid });
-          },
-        },
-      ]
-    );
-  };
+  //   Alert.alert(
+  //     'Unlink Farcaster',
+  //     'Are you sure you want to unlink your Farcaster account?',
+  //     [
+  //       { text: 'Cancel', style: 'cancel' },
+  //       {
+  //         text: 'Unlink',
+  //         style: 'destructive',
+  //         onPress: () => {
+  //           unlinkFarcaster({ fid: farcasterAccount.fid });
+  //         },
+  //       },
+  //     ]
+  //   );
+  // };
 
   const isLinked = (provider: string) => {
     return user?.linked_accounts.find(
@@ -205,7 +198,7 @@ export default function UnlinkAccounts() {
         </View>
 
         {/* Web3 Accounts */}
-        <View style={styles.section}>
+        {/* <View style={styles.section}>
           <Text style={styles.sectionTitle}>Web3</Text>
           <Card>
             <View style={styles.providerItem}>
@@ -254,7 +247,7 @@ export default function UnlinkAccounts() {
               </View>
             </View>
           </Card>
-        </View>
+        </View> */}
 
         {/* Error Display */}
         {error && (

@@ -4,8 +4,8 @@ import Constants from 'expo-constants';
 import {
   useLinkWithOAuth,
   useLinkEmail,
-  useLinkSMS,
-  useLinkWithFarcaster,
+  // useLinkSMS,
+  // useLinkWithFarcaster,
 } from '@privy-io/expo';
 import { useLinkWithPasskey } from '@privy-io/expo/passkey';
 import { Github, Mail, Phone, Key } from 'lucide-react-native';
@@ -38,16 +38,16 @@ export default function LinkAccounts() {
   const [emailCodeSent, setEmailCodeSent] = useState(false);
   const [smsCodeSent, setSmsCodeSent] = useState(false);
 
-  const { linkWithFarcaster } = useLinkWithFarcaster({
-    onSuccess: () => {
-      console.log('Link Farcaster success');
-      setError('');
-    },
-    onError: (err) => {
-      console.log(err);
-      setError(err.message);
-    },
-  });
+  // const { linkWithFarcaster } = useLinkWithFarcaster({
+  //   onSuccess: () => {
+  //     console.log('Link Farcaster success');
+  //     setError('');
+  //   },
+  //   onError: (err) => {
+  //     console.log(err);
+  //     setError(err.message);
+  //   },
+  // });
 
   const { sendCode: sendCodeEmail, linkWithCode: linkWithCodeEmail } =
     useLinkEmail({
@@ -69,24 +69,24 @@ export default function LinkAccounts() {
       },
     });
 
-  const { sendCode: sendCodeSMS, linkWithCode: linkWithCodeSMS } = useLinkSMS({
-    onError: (err) => {
-      console.log(err);
-      setError(err.message);
-    },
-    onLinkSuccess: () => {
-      console.log('Link SMS success');
-      setError('');
-      setPhone('');
-      setSmsCode('');
-      setSmsCodeSent(false);
-    },
-    onSendCodeSuccess: () => {
-      console.log('SMS code sent');
-      setSmsCodeSent(true);
-      setError('');
-    },
-  });
+  // const { sendCode: sendCodeSMS, linkWithCode: linkWithCodeSMS } = useLinkSMS({
+  //   onError: (err) => {
+  //     console.log(err);
+  //     setError(err.message);
+  //   },
+  //   onLinkSuccess: () => {
+  //     console.log('Link SMS success');
+  //     setError('');
+  //     setPhone('');
+  //     setSmsCode('');
+  //     setSmsCodeSent(false);
+  //   },
+  //   onSendCodeSuccess: () => {
+  //     console.log('SMS code sent');
+  //     setSmsCodeSent(true);
+  //     setError('');
+  //   },
+  // });
 
   const { linkWithPasskey } = useLinkWithPasskey({
     onError: (err) => {
@@ -109,16 +109,9 @@ export default function LinkAccounts() {
   });
 
   const providers = [
-    'github',
     'google',
-    'discord',
-    'apple',
+    // 'apple',
     'twitter',
-    'spotify',
-    'instagram',
-    'tiktok',
-    'linkedin',
-    'line',
   ] as const;
 
   return (
@@ -235,7 +228,7 @@ export default function LinkAccounts() {
         </View>
 
         {/* SMS Linking */}
-        <View style={styles.section}>
+        {/* <View style={styles.section}>
           <Text style={styles.sectionTitle}>Phone Number</Text>
           <Card>
             <View style={styles.formContent}>
@@ -266,10 +259,10 @@ export default function LinkAccounts() {
               )}
             </View>
           </Card>
-        </View>
+        </View> */}
 
         {/* Farcaster */}
-        <View style={styles.section}>
+        {/* <View style={styles.section}>
           <Text style={styles.sectionTitle}>Web3</Text>
           <Card>
             <View style={styles.passkeyContent}>
@@ -293,7 +286,7 @@ export default function LinkAccounts() {
               </Button>
             </View>
           </Card>
-        </View>
+        </View> */}
 
         {/* Error Display */}
         {error && (
