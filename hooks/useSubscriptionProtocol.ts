@@ -23,6 +23,7 @@ export function useSubscriptionWallet(userPublicKey?: string, redirectUri?: stri
 
   const {
     signAndSendTransaction,
+    signTransaction,
   } = usePhantomDeeplinkWalletConnector({
     appUrl: APP_CONFIG.APP_URL || 'https://api.devnet.solana.com',
     redirectUri: redirectUri || '/wallet',

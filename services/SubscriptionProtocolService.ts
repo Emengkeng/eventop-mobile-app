@@ -14,7 +14,7 @@ import {
 import { BN, Program, AnchorProvider, Idl } from '@coral-xyz/anchor';
 import { APP_CONFIG } from '@/config/app';
 
-const PROGRAM_ID = new PublicKey('BfvARc8RoHQ64quvHh2X6mSDMwFzxrzWM8HDCmdfbnKt');
+const PROGRAM_ID = new PublicKey('GPVtSfXPiy8y4SkJrMC3VFyKUmGVhMrRbAp2NhiW1Ds2');
 
 const USDC_MINT = new PublicKey('Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr');
 
@@ -163,7 +163,7 @@ export class SubscriptionProtocolService {
     const instructionData = Buffer.from([
       // Instruction discriminator for create_subscription_wallet
       // This would typically come from your IDL
-      185, 3, 90, 137, 83, 170, 138, 84,
+      35,43,93,123,176,230,33,157
     ]);
 
     const keys = [
@@ -238,7 +238,7 @@ export class SubscriptionProtocolService {
 
     // Build deposit instruction
     const instructionData = Buffer.concat([
-      Buffer.from([157, 233, 124, 218, 166, 55, 95, 152]), // deposit_to_wallet discriminator
+      Buffer.from([103,7,8,74,10,156,142,175]), // deposit_to_wallet discriminator
       amountBN.toArrayLike(Buffer, 'le', 8),
     ]);
 
@@ -294,7 +294,7 @@ export class SubscriptionProtocolService {
     const amountBN = new BN(amountInSmallestUnit);
 
     const instructionData = Buffer.concat([
-      Buffer.from([46, 137, 235, 47, 99, 179, 44, 121]), // withdraw_from_wallet discriminator
+      Buffer.from([197,40,222,231,38,226,168,174]), // withdraw_from_wallet discriminator
       amountBN.toArrayLike(Buffer, 'le', 8),
     ]);
 
@@ -355,7 +355,7 @@ export class SubscriptionProtocolService {
     transaction.feePayer = userPublicKey;
 
     const instructionData = Buffer.from([
-      95, 50, 168, 229, 104, 224, 175, 26 // subscribe_with_wallet discriminator
+      8,120,11,42,170,6,72,80 // subscribe_with_wallet discriminator
     ]);
 
     const keys = [
@@ -420,7 +420,7 @@ export class SubscriptionProtocolService {
     transaction.feePayer = userPublicKey;
 
     const instructionData = Buffer.from([
-      239, 94, 227, 206, 106, 48, 47, 82 // execute_payment_from_wallet discriminator
+      65,124,135,175,165,95,251,172 // execute_payment_from_wallet discriminator
     ]);
 
     const keys = [
@@ -472,7 +472,7 @@ export class SubscriptionProtocolService {
     transaction.feePayer = userPublicKey;
 
     const instructionData = Buffer.from([
-      155, 138, 95, 80, 147, 120, 198, 227 // cancel_subscription_wallet discriminator
+      87,116,152,140,138,150,126,195 // cancel_subscription_wallet discriminator
     ]);
 
     const keys = [
