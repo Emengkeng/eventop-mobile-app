@@ -154,16 +154,30 @@ export class SubscriptionProtocolService {
     );
 
     const transaction = new Transaction();
-    const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('finalized');
+    const { blockhash, lastValidBlockHeight } = 
+      await this.connection.getLatestBlockhash('confirmed');
     
     transaction.recentBlockhash = blockhash;
-    transaction.lastValidBlockHeight = lastValidBlockHeight;
+   // transaction.lastValidBlockHeight = lastValidBlockHeight;
     transaction.feePayer = userPublicKey;
 
+    // FIRST: Check if ATA exists, if not create it
+    const ataInfo = await this.connection.getAccountInfo(mainTokenAccount);
+    if (!ataInfo) {
+      transaction.add(
+        createAssociatedTokenAccountInstruction(
+          userPublicKey,
+          mainTokenAccount,
+          subscriptionWalletPDA,
+          this.usdcMint,
+          TOKEN_PROGRAM_ID,
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        )
+      );
+    }
+
     const instructionData = Buffer.from([
-      // Instruction discriminator for create_subscription_wallet
-      // This would typically come from your IDL
-      35,43,93,123,176,230,33,157
+      35, 43, 93, 123, 176, 230, 33, 157 // create_subscription_wallet discriminator
     ]);
 
     const keys = [
@@ -173,7 +187,6 @@ export class SubscriptionProtocolService {
       { pubkey: this.usdcMint, isSigner: false, isWritable: false },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
     ];
 
     transaction.add({
