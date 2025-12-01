@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "EvenTop",
-    "slug": "expo-starter",
+    "slug": "eventop",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.jpg",
@@ -16,7 +16,9 @@
       "usesAppleSignIn": true,
       "supportsTablet": true,
       "bundleIdentifier": "dev.eventop.wallet",
-      "associatedDomains": ["webcredentials:eventop.xyz"],
+      "associatedDomains": [
+        "webcredentials:eventop.xyz"
+      ],
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
@@ -33,7 +35,11 @@
     "extra": {
       "privyAppId": "cmi91u7ca00csl20dktx7r3cr",
       "privyClientId": "client-WY6TC6KG4fD76kZaKeFdzimsWXyNSnRvgjMdeJS2H8p2d",
-      "passkeyAssociatedDomain": "https://eventop.xyz"
+      "passkeyAssociatedDomain": "https://eventop.xyz",
+      "router": {},
+      "eas": {
+        "projectId": "2ceafbb7-4d27-4db3-b894-eec149952c15"
+      }
     },
     "plugins": [
       "expo-router",
@@ -55,6 +61,7 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "owner": "jussec"
   }
 }

@@ -1,33 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
-import { usePhantomDeeplinkWalletConnector } from '@privy-io/expo/connectors';
-import { PublicKey, Transaction } from '@solana/web3.js';
+import { PublicKey } from '@solana/web3.js';
 import { Alert } from 'react-native';
 import {
   subscriptionService,
   SubscriptionWalletData,
-  SubscriptionStateData,
-  getSubscriptionService,
 } from '@/services/SubscriptionProtocolService';
-import { APP_CONFIG } from '@/config/app';
+import { MobileWalletAdapterService } from '@/services/MobileWalletAdapterService';
 
-/**
- * Hook for managing subscription wallet operations
- */
-export function useSubscriptionWallet(userPublicKey?: string, redirectUri?: string) {
+export function useSubscriptionWallet(
+  userPublicKey?: string,
+  authToken?: string
+) {
   const [walletPDA, setWalletPDA] = useState<string | null>(null);
   const [walletData, setWalletData] = useState<SubscriptionWalletData | null>(null);
   const [balance, setBalance] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-
-
-  const {
-    signAndSendTransaction,
-    signTransaction,
-  } = usePhantomDeeplinkWalletConnector({
-    appUrl: APP_CONFIG.APP_URL || 'https://api.devnet.solana.com',
-    redirectUri: redirectUri || '/wallet',
-  });
 
   // Derive and fetch wallet PDA
   useEffect(() => {
@@ -44,21 +32,17 @@ export function useSubscriptionWallet(userPublicKey?: string, redirectUri?: stri
         new PublicKey(userPublicKey)
       );
       
-      // Check if the account actually exists on-chain
       const data = await subscriptionService.getSubscriptionWallet(pda);
       
       if (data) {
-        // Wallet exists
         setWalletPDA(pda.toString());
         setWalletData(data);
         
-        // Fetch balance
         const bal = await subscriptionService.getWalletBalance(
           new PublicKey(userPublicKey)
         );
         setBalance(bal);
       } else {
-        // Wallet doesn't exist yet
         setWalletPDA(null);
         setWalletData(null);
         setBalance(0);
@@ -91,50 +75,66 @@ export function useSubscriptionWallet(userPublicKey?: string, redirectUri?: stri
           setBalance(bal);
         }
       } else {
-        // Account no longer exists or was closed
         setWalletPDA(null);
         setWalletData(null);
         setBalance(0);
       }
     } catch (error) {
       console.error('Error fetching wallet data:', error);
-      // Don't clear state on error - might be network issue
     } finally {
       setRefreshing(false);
     }
   };
 
   const createWallet = async (): Promise<boolean> => {
-    if (!userPublicKey) {
-      Alert.alert('Error', 'User public key not found');
+    if (!userPublicKey || !authToken) {
+      Alert.alert('Error', 'Wallet not connected');
       return false;
     }
 
     setLoading(true);
     try {
-      console.log('🔨 Building transaction...');
+      console.log('Building transaction...');
+      
       const transaction = await subscriptionService.createSubscriptionWallet(
         new PublicKey(userPublicKey)
       );
 
-      console.log('📝 Transaction built:', {
+      console.log('Transaction built:', {
         feePayer: transaction.feePayer?.toString(),
         recentBlockhash: transaction.recentBlockhash,
         instructionCount: transaction.instructions.length,
       });
 
-      console.log('📱 Opening Phantom wallet...');
-      const signature = await signAndSendTransaction(transaction);
+      console.log('Requesting signature from wallet...');
+      
+      // Use MWA to sign and send
+      const signature = await MobileWalletAdapterService.signAndSendTransaction(
+        transaction,
+        authToken
+      );
 
-      console.log('✅ Transaction signed:', signature);
+      console.log('Transaction signature:', signature);
 
       Alert.alert('Success', 'Subscription wallet created successfully!');
       
+      // Wait for confirmation
+      await new Promise(resolve => setTimeout(resolve, 2000));
       await deriveWalletPDA();
+      
       return true;
     } catch (error: any) {
       console.error('Error creating wallet:', error);
-      Alert.alert('Error', error.message || 'Failed to create wallet');
+      
+      let errorMessage = 'Failed to create wallet';
+      
+      if (error?.message?.includes('User declined')) {
+        errorMessage = 'You cancelled the transaction';
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert('Error', errorMessage);
       return false;
     } finally {
       setLoading(false);
@@ -142,8 +142,8 @@ export function useSubscriptionWallet(userPublicKey?: string, redirectUri?: stri
   };
 
   const deposit = async (amount: number): Promise<boolean> => {
-    if (!userPublicKey) {
-      Alert.alert('Error', 'User public key not found');
+    if (!userPublicKey || !authToken) {
+      Alert.alert('Error', 'Wallet not connected');
       return false;
     }
 
@@ -154,22 +154,14 @@ export function useSubscriptionWallet(userPublicKey?: string, redirectUri?: stri
         amount
       );
 
-      const signature = await signAndSendTransaction(transaction);
-
-      Alert.alert(
-        'Success',
-        `Deposited ${amount} USDC successfully!`,
-        [
-          {
-            text: 'View Transaction',
-            onPress: () => {
-              const url = subscriptionService.getExplorerUrl(signature.signature, 'tx');
-              console.log('Transaction:', url);
-            },
-          },
-          { text: 'OK' },
-        ]
+      const signature = await MobileWalletAdapterService.signAndSendTransaction(
+        transaction,
+        authToken
       );
+
+      console.log('✅ Deposit signature:', signature);
+
+      Alert.alert('Success', `Deposited ${amount} USDC successfully!`);
 
       await fetchWalletData();
       return true;
@@ -183,8 +175,8 @@ export function useSubscriptionWallet(userPublicKey?: string, redirectUri?: stri
   };
 
   const withdraw = async (amount: number): Promise<boolean> => {
-    if (!userPublicKey) {
-      Alert.alert('Error', 'User public key not found');
+    if (!userPublicKey || !authToken) {
+      Alert.alert('Error', 'Wallet not connected');
       return false;
     }
 
@@ -195,7 +187,12 @@ export function useSubscriptionWallet(userPublicKey?: string, redirectUri?: stri
         amount
       );
 
-      const signature = await signAndSendTransaction(transaction);
+      const signature = await MobileWalletAdapterService.signAndSendTransaction(
+        transaction,
+        authToken
+      );
+
+      console.log('✅ Withdrawal signature:', signature);
 
       Alert.alert('Success', `Withdrew ${amount} USDC successfully!`);
 
@@ -223,159 +220,6 @@ export function useSubscriptionWallet(userPublicKey?: string, redirectUri?: stri
     createWallet,
     deposit,
     withdraw,
-    refresh,
-  };
-}
-
-/**
- * Hook for managing subscriptions
- */
-export function useSubscriptions(userPublicKey?: string) {
-  const [subscriptions, setSubscriptions] = useState<SubscriptionStateData[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-
-  const {
-    signAndSendTransaction,
-  } = usePhantomDeeplinkWalletConnector({
-    appUrl: APP_CONFIG.APP_URL || 'https://api.devnet.solana.com',
-    redirectUri: '/subscriptions',
-  });
-
-  useEffect(() => {
-    if (userPublicKey) {
-      fetchSubscriptions();
-    }
-  }, [userPublicKey]);
-
-  const fetchSubscriptions = async () => {
-    if (!userPublicKey) return;
-
-    try {
-      setRefreshing(true);
-      const subs = await subscriptionService.getUserSubscriptions(
-        new PublicKey(userPublicKey)
-      );
-      setSubscriptions(subs);
-    } catch (error) {
-      console.error('Error fetching subscriptions:', error);
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const subscribe = async (
-    merchantPublicKey: string,
-    planId: string
-  ): Promise<boolean> => {
-    if (!userPublicKey) {
-      Alert.alert('Error', 'User public key not found');
-      return false;
-    }
-
-    setLoading(true);
-    try {
-      const transaction = await subscriptionService.subscribeWithWallet(
-        new PublicKey(userPublicKey),
-        new PublicKey(merchantPublicKey),
-        planId
-      );
-
-      const signature = await signAndSendTransaction(transaction);
-
-      Alert.alert('Success', 'Subscription created successfully!');
-
-      await fetchSubscriptions();
-      return true;
-    } catch (error: any) {
-      console.error('Error subscribing:', error);
-      Alert.alert('Error', error.message || 'Failed to subscribe');
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const executePayment = async (merchantPublicKey: string): Promise<boolean> => {
-    if (!userPublicKey) {
-      Alert.alert('Error', 'User public key not found');
-      return false;
-    }
-
-    setLoading(true);
-    try {
-      const transaction = await subscriptionService.executePayment(
-        new PublicKey(userPublicKey),
-        new PublicKey(merchantPublicKey)
-      );
-
-      const signature = await signAndSendTransaction(transaction);
-
-      Alert.alert('Success', 'Payment executed successfully!');
-
-      await fetchSubscriptions();
-      return true;
-    } catch (error: any) {
-      console.error('Error executing payment:', error);
-      Alert.alert('Error', error.message || 'Failed to execute payment');
-      return false;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const cancelSubscription = async (merchantPublicKey: string): Promise<boolean> => {
-    if (!userPublicKey) {
-      Alert.alert('Error', 'User public key not found');
-      return false;
-    }
-
-    Alert.alert(
-      'Cancel Subscription',
-      'Are you sure you want to cancel this subscription?',
-      [
-        { text: 'No', style: 'cancel' },
-        {
-          text: 'Yes, Cancel',
-          style: 'destructive',
-          onPress: async () => {
-            setLoading(true);
-            try {
-              const transaction = await subscriptionService.cancelSubscription(
-                new PublicKey(userPublicKey),
-                new PublicKey(merchantPublicKey)
-              );
-
-              const signature = await signAndSendTransaction(transaction);
-
-              Alert.alert('Success', 'Subscription cancelled successfully!');
-
-              await fetchSubscriptions();
-            } catch (error: any) {
-              console.error('Error cancelling subscription:', error);
-              Alert.alert('Error', error.message || 'Failed to cancel subscription');
-            } finally {
-              setLoading(false);
-            }
-          },
-        },
-      ]
-    );
-
-    return false; // Return false immediately as we show confirmation
-  };
-
-  const refresh = useCallback(() => {
-    fetchSubscriptions();
-  }, [userPublicKey]);
-
-  return {
-    subscriptions,
-    loading,
-    refreshing,
-    subscribe,
-    executePayment,
-    cancelSubscription,
     refresh,
   };
 }
