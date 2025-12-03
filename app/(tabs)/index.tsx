@@ -11,30 +11,27 @@ import { radius } from '@/theme/radius';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 
-import { useWalletStore } from '@/store/walletStore';
 import { useSubscriptions, useUpcomingPayments } from '@/hooks/useSubscriptions';
-import { useWalletBalance } from '@/hooks/useWalletBalance';
+import { useUnifiedWallet } from '@/hooks/useUnifiedWallet';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { publicKey, balance } = useWalletStore();
+  
+  const { publicKey, balance, loading, refreshBalance } = useUnifiedWallet();
+  
   const { data: subscriptions, isLoading: subsLoading, refetch } = useSubscriptions();
   const { data: upcomingPayments } = useUpcomingPayments();
-  const { data: walletBalance } = useWalletBalance();
 
   const [refreshing, setRefreshing] = React.useState(false);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await refetch();
+    await Promise.all([refetch(), refreshBalance()]);
     setRefreshing(false);
   };
 
-  // Calculate stats
-  const activeSubscriptions = subscriptions?.filter((s: { isActive: any; }) => s.isActive).length || 0;
-  const totalBalance = walletBalance ? parseFloat(walletBalance.totalSpent) / 1_000_000 : balance.total;
-  const committedBalance = balance.committed;
-  const availableBalance = totalBalance - committedBalance;
+  // Calculate stats from unified balance
+  const activeSubscriptions = subscriptions?.filter((s: any) => s.isActive).length || 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -44,7 +41,7 @@ export default function HomeScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {/* Header */}
+        {/* Header - Shows ONLY the Privy wallet address */}
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>Good morning</Text>
@@ -60,7 +57,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Balance Card */}
+        {/* Balance Card - Shows unified balance */}
         <LinearGradient
           colors={['#18181b', '#27272a']}
           start={{ x: 0, y: 0 }}
@@ -68,28 +65,31 @@ export default function HomeScreen() {
           style={styles.balanceCard}
         >
           <View style={styles.balanceHeader}>
-            <Text style={styles.balanceLabel}>Total Balance</Text>
+            <Text style={styles.balanceLabel}>Balance</Text>
             <TouchableOpacity onPress={() => router.push('../wallet/yield')}>
               <View style={styles.yieldBadge}>
                 <TrendingUp size={12} />
-                <Text style={styles.yieldText}>Coming Soon</Text>
+                <Text style={styles.yieldText}>Earn Yield</Text>
               </View>
             </TouchableOpacity>
           </View>
 
           <Text style={styles.balanceAmount}>
-            ${totalBalance.toFixed(2)}
+            ${balance.total.toFixed(2)}
           </Text>
 
           <View style={styles.balanceBreakdown}>
             <View style={styles.breakdownItem}>
               <Text style={styles.breakdownLabel}>Available</Text>
-              <Text style={styles.breakdownValue}>${availableBalance.toFixed(2)}</Text>
+              <Text style={styles.breakdownValue}>${balance.available.toFixed(2)}</Text>
             </View>
             <View style={styles.breakdownDivider} />
             <View style={styles.breakdownItem}>
-              <Text style={styles.breakdownLabel}>Committed</Text>
-              <Text style={styles.breakdownValue}>${committedBalance.toFixed(2)}</Text>
+              <Text style={styles.breakdownLabel}>Reserved</Text>
+              <Text style={styles.breakdownValue}>${balance.committed.toFixed(2)}</Text>
+              <Text style={styles.breakdownHint}>
+                {activeSubscriptions} active subscription{activeSubscriptions !== 1 ? 's' : ''}
+              </Text>
             </View>
           </View>
 
@@ -102,7 +102,7 @@ export default function HomeScreen() {
               <View style={styles.actionIcon}>
                 <ArrowDownRight size={20} />
               </View>
-              <Text style={styles.actionText}>Deposit</Text>
+              <Text style={styles.actionText}>Add Funds</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -126,6 +126,16 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         </LinearGradient>
+
+        {/* Info Card - Explain how it works (first time users) */}
+        {balance.total === 0 && activeSubscriptions === 0 && (
+          <Card style={styles.infoCard}>
+            <Text style={styles.infoTitle}>How it works</Text>
+            <Text style={styles.infoText}>
+              Add funds to your wallet to start subscribing to services. We'll automatically handle payments for you each month.
+            </Text>
+          </Card>
+        )}
 
         {/* Upcoming Payments */}
         {upcomingPayments && upcomingPayments.length > 0 && (
@@ -317,6 +327,11 @@ const styles = StyleSheet.create({
     color: colors.primaryForeground,
     marginTop: spacing.xs,
   },
+  breakdownHint: {
+    ...typography.caption,
+    color: 'rgba(255,255,255,0.5)',
+    marginTop: 2,
+  },
   breakdownDivider: {
     width: 1,
     height: 32,
@@ -343,6 +358,21 @@ const styles = StyleSheet.create({
   actionText: {
     ...typography.caption,
     color: colors.primaryForeground,
+  },
+  infoCard: {
+    padding: spacing.lg,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    borderColor: 'rgba(59, 130, 246, 0.3)',
+  },
+  infoTitle: {
+    ...typography.bodyMedium,
+    color: colors.foreground,
+    marginBottom: spacing.xs,
+  },
+  infoText: {
+    ...typography.small,
+    color: colors.mutedForeground,
+    lineHeight: 18,
   },
   section: {
     gap: spacing.md,
