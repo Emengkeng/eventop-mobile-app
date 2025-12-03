@@ -47,7 +47,7 @@ export default function Wallets() {
         return createEthereumWallet({ createAdditional: true });
       case "solana":
         return createSolanaWallet?.({
-          createAdditional: true,
+          createAdditional: false,
           recoveryMethod: "privy",
         });
 

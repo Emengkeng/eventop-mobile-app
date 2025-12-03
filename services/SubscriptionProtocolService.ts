@@ -16,7 +16,7 @@ import { APP_CONFIG } from '@/config/app';
 
 const PROGRAM_ID = new PublicKey('GPVtSfXPiy8y4SkJrMC3VFyKUmGVhMrRbAp2NhiW1Ds2');
 
-const USDC_MINT = new PublicKey('Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr');
+const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
 
 export interface SubscriptionWalletData {
   owner: PublicKey;
@@ -154,11 +154,10 @@ export class SubscriptionProtocolService {
     );
 
     const transaction = new Transaction();
-    const { blockhash, lastValidBlockHeight } = 
+    const { blockhash } = 
       await this.connection.getLatestBlockhash('confirmed');
     
     transaction.recentBlockhash = blockhash;
-   // transaction.lastValidBlockHeight = lastValidBlockHeight;
     transaction.feePayer = userPublicKey;
 
     // FIRST: Check if ATA exists, if not create it
@@ -180,6 +179,7 @@ export class SubscriptionProtocolService {
       35, 43, 93, 123, 176, 230, 33, 157 // create_subscription_wallet discriminator
     ]);
 
+    // IMPORTANT: Must match the order in the IDL exactly!
     const keys = [
       { pubkey: subscriptionWalletPDA, isSigner: false, isWritable: true },
       { pubkey: mainTokenAccount, isSigner: false, isWritable: true },
@@ -187,6 +187,7 @@ export class SubscriptionProtocolService {
       { pubkey: this.usdcMint, isSigner: false, isWritable: false },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false }, // ← THIS WAS MISSING!
     ];
 
     transaction.add({
@@ -203,37 +204,32 @@ export class SubscriptionProtocolService {
    */
   async depositToWallet(
     userPublicKey: PublicKey,
-    amount: number // Amount in USDC (e.g., 100.5)
+    amount: number
   ): Promise<Transaction> {
     const [subscriptionWalletPDA] = await this.findSubscriptionWalletPDA(
       userPublicKey,
       this.usdcMint
     );
 
-    // User's token account
     const userTokenAccount = await getAssociatedTokenAddress(
       this.usdcMint,
       userPublicKey
     );
 
-    // Wallet's token account
     const walletTokenAccount = await getAssociatedTokenAddress(
       this.usdcMint,
       subscriptionWalletPDA,
       true
     );
 
-    // Check if wallet token account exists, if not, create it
     const walletAccountInfo = await this.connection.getAccountInfo(walletTokenAccount);
     
     const transaction = new Transaction();
-    const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('finalized');
+    const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
     
     transaction.recentBlockhash = blockhash;
-    transaction.lastValidBlockHeight = lastValidBlockHeight;
     transaction.feePayer = userPublicKey;
 
-    // Create wallet token account if it doesn't exist
     if (!walletAccountInfo) {
       transaction.add(
         createAssociatedTokenAccountInstruction(
@@ -245,22 +241,21 @@ export class SubscriptionProtocolService {
       );
     }
 
-    // Convert USDC to smallest unit (6 decimals)
     const amountInSmallestUnit = Math.floor(amount * 1_000_000);
     const amountBN = new BN(amountInSmallestUnit);
 
-    // Build deposit instruction
+    // Create instruction data with discriminator + amount (u64, 8 bytes, little-endian)
     const instructionData = Buffer.concat([
-      Buffer.from([103,7,8,74,10,156,142,175]), // deposit_to_wallet discriminator
-      amountBN.toArrayLike(Buffer, 'le', 8),
+      Buffer.from([103, 7, 8, 74, 10, 156, 142, 175]), // discriminator
+      amountBN.toArrayLike(Buffer, 'le', 8), // amount as u64
     ]);
 
     const keys = [
-      { pubkey: subscriptionWalletPDA, isSigner: false, isWritable: false },
+      { pubkey: subscriptionWalletPDA, isSigner: false, isWritable: false }, // Note: writable=false in IDL
       { pubkey: userPublicKey, isSigner: true, isWritable: true },
       { pubkey: userTokenAccount, isSigner: false, isWritable: true },
       { pubkey: walletTokenAccount, isSigner: false, isWritable: true },
-      { pubkey: PublicKey.default, isSigner: false, isWritable: false }, // yield_vault_account (placeholder)
+      { pubkey: PublicKey.default, isSigner: false, isWritable: false }, // yield_vault_account
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
     ];
 
@@ -361,16 +356,16 @@ export class SubscriptionProtocolService {
     );
 
     const transaction = new Transaction();
-    const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('finalized');
+    const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
     
     transaction.recentBlockhash = blockhash;
-    transaction.lastValidBlockHeight = lastValidBlockHeight;
     transaction.feePayer = userPublicKey;
 
     const instructionData = Buffer.from([
-      8,120,11,42,170,6,72,80 // subscribe_with_wallet discriminator
+      8, 120, 11, 42, 170, 6, 72, 80 // subscribe_with_wallet discriminator
     ]);
 
+    // CORRECTED ORDER TO MATCH IDL
     const keys = [
       { pubkey: subscriptionStatePDA, isSigner: false, isWritable: true },
       { pubkey: subscriptionWalletPDA, isSigner: false, isWritable: true },
