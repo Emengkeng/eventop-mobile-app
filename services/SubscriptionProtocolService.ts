@@ -58,7 +58,7 @@ export interface SubscriptionStateData {
 }
 
 export class SubscriptionProtocolService {
-  private connection: Connection;
+  public connection: Connection;
   private programId: PublicKey;
   private usdcMint: PublicKey;
 

@@ -2,57 +2,29 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, Info } from 'lucide-react-native';
 import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { spacing } from '@/theme/spacing';
+import { radius } from '@/theme/radius';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { MWAWalletConnector } from '@/components/walletActions/MWAWalletConnector';
-import { useSubscriptionWallet } from '@/hooks/useSubscriptionProtocol';
-import { radius } from '@/theme/radius';
+import { useUnifiedWallet } from '@/hooks/useUnifiedWallet';
 
 export default function DepositScreen() {
   const router = useRouter();
-  
-  const [connectedAddress, setConnectedAddress] = useState<string | null>(null);
-  const [connectedAuthToken, setConnectedAuthToken] = useState<string | null>(null);
-  
-  const {
-    walletPDA,
-    balance: subscriptionWalletBalance,
-    loading: walletLoading,
-    deposit,
-    createWallet,
-  } = useSubscriptionWallet(connectedAddress || undefined, connectedAuthToken || undefined);
+  const { publicKey, balance, loading: walletLoading, deposit, refreshBalance } = useUnifiedWallet();
 
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const hasWallet = !!walletPDA;
-  const isConnected = !!connectedAddress;
+  const isConnected = !!publicKey;
 
-  const handleWalletConnected = (address: string, authToken: string) => {
-    setConnectedAddress(address);
-    setConnectedAuthToken(authToken);
-  };
+  const quickAmounts = [10, 25, 50, 100];
 
-  const handleWalletDisconnected = () => {
-    setConnectedAddress(null);
-    setConnectedAuthToken(null);
-  };
-
-  const handleCreateWallet = async () => {
-    setLoading(true);
-    try {
-      const success = await createWallet();
-      if (success) {
-        Alert.alert('Success', 'Subscription wallet created!');
-      }
-    } finally {
-      setLoading(false);
-    }
+  const handleQuickAmount = (quickAmount: number) => {
+    setAmount(quickAmount.toString());
   };
 
   const handleDeposit = async () => {
@@ -61,9 +33,11 @@ export default function DepositScreen() {
       return;
     }
 
+    const depositAmount = parseFloat(amount);
+
     Alert.alert(
       'Confirm Deposit',
-      `Deposit ${amount} USDC to your Subscription Wallet?`,
+      `Add $${depositAmount.toFixed(2)} USDC to your wallet?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -71,10 +45,31 @@ export default function DepositScreen() {
           onPress: async () => {
             setLoading(true);
             try {
-              const success = await deposit(parseFloat(amount));
-              if (success) {
+              const signature = await deposit(depositAmount);
+              
+              if (signature) {
+                Alert.alert(
+                  'Success!',
+                  `Deposited $${depositAmount.toFixed(2)} USDC`,
+                  [
+                    {
+                      text: 'View Transaction',
+                      onPress: () => {
+                        // Open Solana Explorer
+                        console.log(`https://explorer.solana.com/tx/${signature}?cluster=devnet`);
+                      }
+                    },
+                    { text: 'Done' }
+                  ]
+                );
                 setAmount('');
+                await refreshBalance();
               }
+            } catch (error: any) {
+              Alert.alert(
+                'Deposit Failed',
+                error.message || 'Failed to deposit funds. Please try again.'
+              );
             } finally {
               setLoading(false);
             }
@@ -84,70 +79,145 @@ export default function DepositScreen() {
     );
   };
 
+  if (!isConnected) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color={colors.foreground} />
+          </TouchableOpacity>
+          <Text style={styles.title}>Add Funds</Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <View style={styles.centerContent}>
+          <Card>
+            <Text style={styles.emptyTitle}>Wallet Not Connected</Text>
+            <Text style={styles.emptyDescription}>
+              Please connect your wallet to add funds
+            </Text>
+            <Button onPress={() => router.push('/profile')}>
+              Go to Profile
+            </Button>
+          </Card>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <ArrowLeft size={24} color={colors.foreground} />
         </TouchableOpacity>
-        <Text style={styles.title}>Deposit Funds</Text>
+        <Text style={styles.title}>Add Funds</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {/* Wallet Connection */}
-        <MWAWalletConnector
-          onConnected={handleWalletConnected}
-          onDisconnected={handleWalletDisconnected}
-        />
+        {/* Current Balance */}
+        <Card style={styles.balanceCard}>
+          <Text style={styles.balanceLabel}>Current Balance</Text>
+          <Text style={styles.balanceAmount}>
+            ${balance.total.toFixed(2)}
+          </Text>
+          
+          <View style={styles.balanceBreakdown}>
+            <View style={styles.breakdownItem}>
+              <Text style={styles.breakdownLabel}>Available</Text>
+              <Text style={styles.breakdownValue}>
+                ${balance.available.toFixed(2)}
+              </Text>
+            </View>
+            <View style={styles.breakdownDivider} />
+            <View style={styles.breakdownItem}>
+              <Text style={styles.breakdownLabel}>Reserved</Text>
+              <Text style={styles.breakdownValue}>
+                ${balance.committed.toFixed(2)}
+              </Text>
+            </View>
+          </View>
+        </Card>
 
-        {/* Create Subscription Wallet */}
-        {isConnected && !hasWallet && (
-          <Card>
-            <Text style={styles.cardTitle}>Create Subscription Wallet</Text>
-            <Text style={styles.description}>
-              You need to create a subscription wallet before you can deposit funds.
-            </Text>
-            <Button
-              onPress={handleCreateWallet}
-              loading={loading || walletLoading}
-              disabled={loading || walletLoading}
-            >
-              Create Subscription Wallet
-            </Button>
-          </Card>
-        )}
+        {/* Info Box */}
+        <View style={styles.infoBox}>
+          <View style={styles.infoHeader}>
+            <Info size={16} color={colors.primary} />
+            <Text style={styles.infoTitle}>How deposits work</Text>
+          </View>
+          <Text style={styles.infoText}>
+            Funds are deposited to your subscription wallet. They'll be used automatically 
+            for your subscription payments each month.
+          </Text>
+        </View>
 
         {/* Deposit Form */}
-        {isConnected && hasWallet && (
-          <>
-            <Card>
-              <Text style={styles.cardTitle}>Current Balance</Text>
-              <Text style={styles.balanceAmount}>
-                ${subscriptionWalletBalance.toFixed(2)}
-              </Text>
-            </Card>
+        <Card>
+          <Text style={styles.cardTitle}>Deposit Amount</Text>
+          
+          <Input
+            label="Amount (USDC)"
+            value={amount}
+            onChangeText={setAmount}
+            placeholder="0.00"
+            keyboardType="decimal-pad"
+            editable={!loading && !walletLoading}
+          />
 
-            <Card>
-              <Text style={styles.cardTitle}>Deposit Amount</Text>
-              <Input
-                label="Amount (USDC)"
-                value={amount}
-                onChangeText={setAmount}
-                placeholder="0.00"
-                keyboardType="decimal-pad"
-                editable={!loading}
-              />
-              <Button
-                onPress={handleDeposit}
-                loading={loading}
-                disabled={loading || !amount || parseFloat(amount) <= 0}
+          {/* Quick Amount Buttons */}
+          <View style={styles.quickAmounts}>
+            {quickAmounts.map((quickAmount) => (
+              <TouchableOpacity
+                key={quickAmount}
+                style={[
+                  styles.quickAmountButton,
+                  amount === quickAmount.toString() && styles.quickAmountButtonActive,
+                ]}
+                onPress={() => handleQuickAmount(quickAmount)}
+                disabled={loading || walletLoading}
               >
-                {amount ? `Deposit $${amount}` : 'Deposit'}
-              </Button>
-            </Card>
-          </>
-        )}
+                <Text
+                  style={[
+                    styles.quickAmountText,
+                    amount === quickAmount.toString() && styles.quickAmountTextActive,
+                  ]}
+                >
+                  ${quickAmount}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Estimated Balance After Deposit */}
+          {amount && parseFloat(amount) > 0 && (
+            <View style={styles.estimateBox}>
+              <Text style={styles.estimateLabel}>Balance after deposit</Text>
+              <Text style={styles.estimateValue}>
+                ${(balance.total + parseFloat(amount)).toFixed(2)}
+              </Text>
+            </View>
+          )}
+
+          <Button
+            onPress={handleDeposit}
+            loading={loading || walletLoading}
+            disabled={loading || walletLoading || !amount || parseFloat(amount) <= 0}
+            style={styles.depositButton}
+          >
+            {amount && parseFloat(amount) > 0
+              ? `Deposit $${parseFloat(amount).toFixed(2)}`
+              : 'Enter Amount'}
+          </Button>
+        </Card>
+
+        {/* Additional Info */}
+        <View style={styles.noteBox}>
+          <Text style={styles.noteText}>
+            💡 Tip: Keep enough balance to cover 3 months of subscriptions to avoid 
+            service interruptions.
+          </Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -181,128 +251,140 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.lg,
   },
-  cardHeader: {
-    marginBottom: spacing.md,
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: spacing.lg,
   },
-  cardTitle: {
-    ...typography.h4,
+  emptyTitle: {
+    ...typography.h3,
     color: colors.foreground,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
   },
-  description: {
+  emptyDescription: {
     ...typography.body,
     color: colors.mutedForeground,
-    marginBottom: spacing.md,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
   },
-  balanceRow: {
-    backgroundColor: colors.background,
-    padding: spacing.md,
-    borderRadius: radius.md,
-  },
-  balanceInfo: {
-    alignItems: 'center',
-    gap: spacing.xs,
+  balanceCard: {
+    padding: spacing.lg,
   },
   balanceLabel: {
     ...typography.small,
     color: colors.mutedForeground,
+    marginBottom: spacing.xs,
   },
   balanceAmount: {
-    ...typography.h2,
+    ...typography.h1,
+    fontSize: 36,
     color: colors.foreground,
-  },
-  balanceSubtext: {
-    ...typography.small,
-    color: colors.mutedForeground,
-  },
-  arrowContainer: {
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-  },
-  refreshButton: {
-    marginTop: spacing.md,
-    alignItems: 'center',
-    padding: spacing.sm,
-  },
-  refreshText: {
-    ...typography.smallMedium,
-    color: colors.primary,
-  },
-  inputContainer: {
-    position: 'relative',
-  },
-  maxButton: {
-    position: 'absolute',
-    right: spacing.md,
-    top: 38,
-    backgroundColor: colors.primary,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.sm,
-  },
-  maxButtonText: {
-    ...typography.smallMedium,
-    color: colors.background,
-  },
-  quickAmounts: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginVertical: spacing.md,
-  },
-  quickAmountButton: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    backgroundColor: colors.secondary,
-    borderRadius: radius.md,
-    alignItems: 'center',
-  },
-  quickAmountText: {
-    ...typography.smallMedium,
-    color: colors.foreground,
-  },
-  disabledText: {
-    color: colors.mutedForeground,
-    opacity: 0.5,
-  },
-  errorText: {
-    ...typography.small,
-    color: colors.destructive,
-    textAlign: 'center',
-    marginTop: spacing.sm,
-  },
-  infoRow: {
-    gap: spacing.xs,
     marginBottom: spacing.md,
   },
-  infoLabel: {
-    ...typography.small,
-    color: colors.mutedForeground,
-  },
-  infoValue: {
-    ...typography.bodyMedium,
-    color: colors.foreground,
-  },
-  viewExplorer: {
+  balanceBreakdown: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
-    justifyContent: 'center',
+    gap: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
-  viewExplorerText: {
-    ...typography.smallMedium,
-    color: colors.primary,
+  breakdownItem: {
+    flex: 1,
+  },
+  breakdownLabel: {
+    ...typography.caption,
+    color: colors.mutedForeground,
+  },
+  breakdownValue: {
+    ...typography.bodyMedium,
+    color: colors.foreground,
+    marginTop: spacing.xs,
+  },
+  breakdownDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: colors.border,
   },
   infoBox: {
     padding: spacing.lg,
-    backgroundColor: colors.secondary,
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
     borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.3)',
     gap: spacing.sm,
+  },
+  infoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   infoTitle: {
     ...typography.bodyMedium,
     color: colors.foreground,
   },
   infoText: {
+    ...typography.small,
+    color: colors.mutedForeground,
+    lineHeight: 20,
+  },
+  cardTitle: {
+    ...typography.h4,
+    color: colors.foreground,
+    marginBottom: spacing.md,
+  },
+  quickAmounts: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  quickAmountButton: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.secondary,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  quickAmountButtonActive: {
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    borderColor: colors.primary,
+  },
+  quickAmountText: {
+    ...typography.smallMedium,
+    color: colors.foreground,
+  },
+  quickAmountTextActive: {
+    color: colors.primary,
+  },
+  estimateBox: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: spacing.md,
+    backgroundColor: colors.secondary,
+    borderRadius: radius.md,
+    marginTop: spacing.md,
+  },
+  estimateLabel: {
+    ...typography.small,
+    color: colors.mutedForeground,
+  },
+  estimateValue: {
+    ...typography.bodyMedium,
+    color: colors.success,
+  },
+  depositButton: {
+    marginTop: spacing.lg,
+  },
+  noteBox: {
+    padding: spacing.lg,
+    backgroundColor: colors.secondary,
+    borderRadius: radius.lg,
+  },
+  noteText: {
     ...typography.small,
     color: colors.mutedForeground,
     lineHeight: 20,
