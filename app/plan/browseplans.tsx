@@ -22,57 +22,70 @@ export default function BrowsePlansScreen() {
     ...(selectedCategory !== 'All' && { category: selectedCategory }),
   };
 
-  const { data: plans, isLoading } = usePlans(filters);
+  const { data: plans, isLoading, error } = usePlans(filters);
 
-  const renderPlanCard = ({ item }: { item: any }) => (
-    <TouchableOpacity
-      onPress={() => router.push(`../plan/${item.planPda}`)}
-    >
-      <Card style={styles.planCard}>
-        <View style={styles.planHeader}>
-          <View style={styles.planIcon}>
-            <Text style={styles.planIconText}>
-              {item.planName?.slice(0, 2).toUpperCase() || '??'}
+  const renderPlanCard = ({ item }: { item: any }) => {
+    const monthlyFee = parseFloat(item.feeAmount) / 1_000_000;
+
+    return (
+      <TouchableOpacity
+        onPress={() => router.push(`./${item.planPda}`)}
+        activeOpacity={0.7}
+      >
+        <Card style={styles.planCard}>
+          <View style={styles.planHeader}>
+            <View style={styles.planIcon}>
+              <Text style={styles.planIconText}>
+                {item.planName?.slice(0, 2).toUpperCase() || '??'}
+              </Text>
+            </View>
+            <View style={styles.planInfo}>
+              <Text style={styles.planName} numberOfLines={1}>
+                {item.planName || 'Unknown Plan'}
+              </Text>
+              <Text style={styles.merchantName}>
+                {item.merchantWallet.slice(0, 8)}...
+              </Text>
+            </View>
+          </View>
+
+          {item.description && (
+            <Text style={styles.planDescription} numberOfLines={2}>
+              {item.description}
             </Text>
-          </View>
-          <View style={styles.planInfo}>
-            <Text style={styles.planName}>{item.planName || 'Unknown Plan'}</Text>
-            <Text style={styles.merchantName}>
-              {item.merchantWallet.slice(0, 8)}...
-            </Text>
-          </View>
-        </View>
+          )}
 
-        {item.description && (
-          <Text style={styles.planDescription} numberOfLines={2}>
-            {item.description}
-          </Text>
-        )}
+          <View style={styles.planFooter}>
+            <View style={styles.priceContainer}>
+              <Text style={styles.price}>
+                ${monthlyFee.toFixed(2)}
+              </Text>
+              <Text style={styles.priceInterval}>/month</Text>
+            </View>
 
-        <View style={styles.planFooter}>
-          <View style={styles.priceContainer}>
-            <Text style={styles.price}>
-              ${(parseFloat(item.feeAmount) / 1_000_000).toFixed(2)}
-            </Text>
-            <Text style={styles.priceInterval}>/month</Text>
+            <View style={styles.subscribersContainer}>
+              <TrendingUp size={14} color={colors.mutedForeground} />
+              <Text style={styles.subscribers}>
+                {item.totalSubscribers} subscriber{item.totalSubscribers !== 1 ? 's' : ''}
+              </Text>
+            </View>
           </View>
 
-          <View style={styles.subscribersContainer}>
-            <TrendingUp size={14} />
-            <Text style={styles.subscribers}>
-              {item.totalSubscribers} subscriber{item.totalSubscribers !== 1 ? 's' : ''}
-            </Text>
-          </View>
-        </View>
+          {item.category && (
+            <View style={styles.categoryBadge}>
+              <Text style={styles.categoryText}>{item.category}</Text>
+            </View>
+          )}
 
-        {item.category && (
-          <View style={styles.categoryBadge}>
-            <Text style={styles.categoryText}>{item.category}</Text>
-          </View>
-        )}
-      </Card>
-    </TouchableOpacity>
-  );
+          {!item.isActive && (
+            <View style={[styles.categoryBadge, styles.inactiveBadge]}>
+              <Text style={[styles.categoryText, styles.inactiveText]}>Inactive</Text>
+            </View>
+          )}
+        </Card>
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -80,13 +93,13 @@ export default function BrowsePlansScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Browse Plans</Text>
         <TouchableOpacity style={styles.filterButton}>
-          <Filter size={20} />
+          <Filter size={20} color={colors.foreground} />
         </TouchableOpacity>
       </View>
 
       {/* Search Bar */}
       <View style={styles.searchContainer}>
-        <Search size={20} />
+        <Search size={20} color={colors.mutedForeground} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search subscriptions..."
@@ -124,7 +137,14 @@ export default function BrowsePlansScreen() {
       />
 
       {/* Plans List */}
-      {isLoading ? (
+      {error ? (
+        <View style={styles.centerContainer}>
+          <Text style={styles.emptyTitle}>Error Loading Plans</Text>
+          <Text style={styles.emptyDescription}>
+            {error.message || 'Something went wrong. Please try again.'}
+          </Text>
+        </View>
+      ) : isLoading ? (
         <View style={styles.centerContainer}>
           <Text style={styles.loadingText}>Loading plans...</Text>
         </View>
@@ -132,7 +152,9 @@ export default function BrowsePlansScreen() {
         <View style={styles.centerContainer}>
           <Text style={styles.emptyTitle}>No plans found</Text>
           <Text style={styles.emptyDescription}>
-            Try adjusting your search or filters
+            {search || selectedCategory !== 'All'
+              ? 'Try adjusting your search or filters'
+              : 'No subscription plans available yet'}
           </Text>
         </View>
       ) : (
@@ -181,9 +203,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     height: 48,
-  },
-  searchIcon: {
-    marginRight: spacing.sm,
+    gap: spacing.sm,
   },
   searchInput: {
     ...typography.body,
@@ -295,6 +315,14 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.foreground,
   },
+  inactiveBadge: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  inactiveText: {
+    color: colors.destructive,
+  },
   centerContainer: {
     flex: 1,
     alignItems: 'center',
@@ -309,6 +337,7 @@ const styles = StyleSheet.create({
     ...typography.h3,
     color: colors.foreground,
     marginBottom: spacing.sm,
+    textAlign: 'center',
   },
   emptyDescription: {
     ...typography.body,
