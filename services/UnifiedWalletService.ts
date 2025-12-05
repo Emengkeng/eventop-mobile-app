@@ -26,11 +26,11 @@ export class UnifiedWalletService {
     );
 
     // Check if it exists on-chain
-    const walletData = await subscriptionService.getSubscriptionWallet(subscriptionWalletPDA);
+    const exists = await subscriptionService.subscriptionWalletExists(subscriptionWalletPDA);
     
     return {
       subscriptionWalletPDA,
-      needsCreation: walletData === null
+      needsCreation: !exists
     };
   }
 
@@ -39,17 +39,41 @@ export class UnifiedWalletService {
    */
   static async prepareForSubscriptionOperation(
     privyWallet: any
-  ): Promise<PublicKey> {
-    const { subscriptionWalletPDA, needsCreation } = 
-      await this.ensureSubscriptionWallet(privyWallet);
+    ): Promise<PublicKey> {
+    if (!privyWallet?.publicKey) {
+        throw new Error('Privy wallet not initialized');
+    }
 
-    if (needsCreation) {
-      // Create the wallet automatically
-      await this.createSubscriptionWallet(privyWallet);
+    const userPubkey = new PublicKey(privyWallet.publicKey);
+    const [subscriptionWalletPDA] = await subscriptionService.findSubscriptionWalletPDA(userPubkey);
+
+    // if (subscriptionWalletPDA.toBase58() == "B5DDP1qKBRxgZpNAshBd3oTj8M6qiP9n2UYu3Q3v6sfy") {
+    //     throw new Error('Subscription wallet PDA mismatch');
+    // }
+
+    // Fresh check right before creation attempt
+    const accountInfo = await subscriptionService.connection.getAccountInfo(subscriptionWalletPDA);
+    
+    if (!accountInfo || !accountInfo.owner.equals(subscriptionService['programId'])) {
+        // Definitely needs creation
+        try {
+        const createSig = await this.createSubscriptionWallet(privyWallet);
+        await subscriptionService.connection.confirmTransaction(createSig, 'confirmed');
+        console.log('✅ Subscription wallet created:', createSig);
+        } catch (error: any) {
+        // Double-check if another transaction created it concurrently
+        const recheckInfo = await subscriptionService.connection.getAccountInfo(subscriptionWalletPDA);
+        if (!recheckInfo || !recheckInfo.owner.equals(subscriptionService['programId'])) {
+            throw error; // Actually failed
+        }
+        console.log('⚠️ Wallet created by concurrent transaction');
+        }
+    } else {
+        console.log('✅ Subscription wallet already exists');
     }
 
     return subscriptionWalletPDA;
-  }
+    }
 
   /**
    * Create subscription wallet using Privy's embedded wallet
