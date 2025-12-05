@@ -141,6 +141,7 @@ export class SubscriptionProtocolService {
   async createSubscriptionWallet(
     userPublicKey: PublicKey
   ): Promise<Transaction> {
+    console.log('Creating subscription wallet...');
     const [subscriptionWalletPDA] = await this.findSubscriptionWalletPDA(
       userPublicKey,
       this.usdcMint
@@ -160,26 +161,28 @@ export class SubscriptionProtocolService {
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = userPublicKey;
 
-    // FIRST: Check if ATA exists, if not create it
+    // Check if ATA exists, create if needed
     const ataInfo = await this.connection.getAccountInfo(mainTokenAccount);
     if (!ataInfo) {
+      console.log('Creating ATA for subscription wallet...');
       transaction.add(
         createAssociatedTokenAccountInstruction(
-          userPublicKey,
-          mainTokenAccount,
-          subscriptionWalletPDA,
-          this.usdcMint,
+          userPublicKey,        // payer
+          mainTokenAccount,     // ata
+          subscriptionWalletPDA, // owner (the PDA)
+          this.usdcMint,        // mint
           TOKEN_PROGRAM_ID,
           ASSOCIATED_TOKEN_PROGRAM_ID
         )
       );
+    } else {
+      console.log('ATA already exists for subscription wallet');
     }
 
     const instructionData = Buffer.from([
       35, 43, 93, 123, 176, 230, 33, 157 // create_subscription_wallet discriminator
     ]);
 
-    // IMPORTANT: Must match the order in the IDL exactly!
     const keys = [
       { pubkey: subscriptionWalletPDA, isSigner: false, isWritable: true },
       { pubkey: mainTokenAccount, isSigner: false, isWritable: true },
@@ -187,7 +190,7 @@ export class SubscriptionProtocolService {
       { pubkey: this.usdcMint, isSigner: false, isWritable: false },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false }, // ← THIS WAS MISSING!
+      { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
     ];
 
     transaction.add({
@@ -222,40 +225,26 @@ export class SubscriptionProtocolService {
       true
     );
 
-    const walletAccountInfo = await this.connection.getAccountInfo(walletTokenAccount);
-    
     const transaction = new Transaction();
     const { blockhash } = await this.connection.getLatestBlockhash('confirmed');
     
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = userPublicKey;
 
-    if (!walletAccountInfo) {
-      transaction.add(
-        createAssociatedTokenAccountInstruction(
-          userPublicKey,
-          walletTokenAccount,
-          subscriptionWalletPDA,
-          this.usdcMint
-        )
-      );
-    }
-
     const amountInSmallestUnit = Math.floor(amount * 1_000_000);
     const amountBN = new BN(amountInSmallestUnit);
 
-    // Create instruction data with discriminator + amount (u64, 8 bytes, little-endian)
     const instructionData = Buffer.concat([
       Buffer.from([103, 7, 8, 74, 10, 156, 142, 175]), // discriminator
-      amountBN.toArrayLike(Buffer, 'le', 8), // amount as u64
+      amountBN.toArrayLike(Buffer, 'le', 8),
     ]);
 
     const keys = [
-      { pubkey: subscriptionWalletPDA, isSigner: false, isWritable: false }, // Note: writable=false in IDL
+      { pubkey: subscriptionWalletPDA, isSigner: false, isWritable: false },
       { pubkey: userPublicKey, isSigner: true, isWritable: true },
       { pubkey: userTokenAccount, isSigner: false, isWritable: true },
       { pubkey: walletTokenAccount, isSigner: false, isWritable: true },
-      { pubkey: PublicKey.default, isSigner: false, isWritable: false }, // yield_vault_account
+      { pubkey: PublicKey.default, isSigner: false, isWritable: false },
       { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
     ];
 
@@ -519,6 +508,22 @@ export class SubscriptionProtocolService {
     } catch (error) {
       console.error('Error fetching subscription wallet:', error);
       return null;
+    }
+  }
+
+  /**
+   * Check if subscription wallet exists
+   */
+  async subscriptionWalletExists(userPublicKey: PublicKey): Promise<boolean> {
+    try {
+      const [walletPDA] = await this.findSubscriptionWalletPDA(userPublicKey);
+      const accountInfo = await this.connection.getAccountInfo(walletPDA);
+      
+      // Check if account exists AND is owned by our program
+      return accountInfo !== null && accountInfo.owner.equals(this.programId);
+    } catch (error) {
+      console.error('Error checking subscription wallet:', error);
+      return false;
     }
   }
 

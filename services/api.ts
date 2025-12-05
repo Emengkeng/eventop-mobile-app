@@ -3,7 +3,7 @@ import { useWalletStore } from '@/store/walletStore';
 
 const API_URL = __DEV__ 
   ? 'http://localhost:3001' 
-  : 'https://api.eventop.xyz';
+  : 'https://eventop-server-app-production.up.railway.app';
 
 export const api = axios.create({
   baseURL: API_URL,

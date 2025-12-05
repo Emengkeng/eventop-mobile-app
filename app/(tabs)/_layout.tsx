@@ -45,13 +45,6 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => <User size={size} />,
         }}
       />
-      <Tabs.Screen
-        name="privy"
-        options={{
-          title: 'Privy',
-          tabBarIcon: ({ color, size }) => <User size={size} />,
-        }}
-      />
     </Tabs>
   );
 }
