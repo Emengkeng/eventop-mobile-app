@@ -73,7 +73,7 @@ export class UnifiedWalletService {
     }
 
     return subscriptionWalletPDA;
-    }
+  }
 
   /**
    * Create subscription wallet using Privy's embedded wallet
