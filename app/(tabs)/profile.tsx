@@ -136,7 +136,7 @@ export default function ProfileScreen() {
         </Card>
 
         {/* User ID */}
-        {user?.id && (
+        {/* {user?.id && (
           <Card>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>User ID</Text>
@@ -145,7 +145,7 @@ export default function ProfileScreen() {
               </Text>
             </View>
           </Card>
-        )}
+        )} */}
 
         {/* Linked Accounts Summary */}
         <Card>
