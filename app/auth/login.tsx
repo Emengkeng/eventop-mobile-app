@@ -158,14 +158,14 @@ export default function LoginScreen() {
         </Card>
 
         {/* Divider */}
-        <View style={styles.divider}>
+        {/* <View style={styles.divider}>
           <View style={styles.dividerLine} />
           <Text style={styles.dividerText}>or continue with</Text>
           <View style={styles.dividerLine} />
-        </View>
+        </View> */}
 
         {/* OAuth Buttons */}
-        <View style={styles.oauthButtons}>
+        {/* <View style={styles.oauthButtons}>
           <Button
             variant="outline"
             onPress={() => loginWithGoogle()}
@@ -182,7 +182,7 @@ export default function LoginScreen() {
           >
             Twitter
           </Button>
-        </View>
+        </View> */}
 
         {/* Terms */}
         <Text style={styles.terms}>
