@@ -6,12 +6,12 @@ import {
   Alert, 
   ScrollView, 
   Linking, 
-  SafeAreaView,
   ActivityIndicator,
   Image,
   StyleSheet,
   TouchableOpacity
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, AlertCircle } from 'lucide-react-native';
 import { useUnifiedWallet } from '@/hooks/useUnifiedWallet';
 import { Card } from '@/components/ui/Card';
