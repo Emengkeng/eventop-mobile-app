@@ -11,6 +11,7 @@ import {
   StyleSheet,
   TouchableOpacity
 } from 'react-native';
+import { useEmbeddedSolanaWallet } from "@privy-io/expo";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, AlertCircle } from 'lucide-react-native';
 import { useUnifiedWallet } from '@/hooks/useUnifiedWallet';
@@ -22,6 +23,8 @@ import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { spacing } from '@/theme/spacing';
 import { radius } from '@/theme/radius';
+import * as bs58 from 'bs58';
+import nacl from 'tweetnacl';
 
 interface CheckoutSession {
   sessionId: string;
@@ -48,6 +51,7 @@ interface CheckoutSession {
 export default function SubscribeFromWebScreen() {
   const { sessionId } = useLocalSearchParams();
   const router = useRouter();
+  const { wallets } = useEmbeddedSolanaWallet();
   const { publicKey, balance, subscribe, loading: walletLoading } = useUnifiedWallet();
 
   const [session, setSession] = useState<CheckoutSession | null>(null);
@@ -148,24 +152,54 @@ export default function SubscribeFromWebScreen() {
     );
   };
 
+  /**
+   * Sign a message with the user's wallet to prove ownership
+   */
+  const signMessageWithWallet = async (message: string): Promise<string> => {
+    try {
+      const privyWallet = wallets?.[0];
+
+      if (!privyWallet?.getProvider) return;
+      const provider = await privyWallet.getProvider?.();
+      if (!provider) return;
+
+      const { signature } = await provider.request({
+        method: "signMessage",
+        params: { message },
+      });
+      
+      return signature;
+    } catch (error) {
+      console.error('Error signing message:', error);
+      throw new Error('Failed to sign message with wallet');
+    }
+  };
+
   const executeSubscription = async () => {
     if (!session || !publicKey) return;
 
     setSubscribing(true);
 
     try {
-      // Execute on-chain subscription
+      // Step 1: Execute on-chain subscription transaction
       const merchantPubkey = new PublicKey(session.merchantWallet);
       const signature = await subscribe(merchantPubkey, session.planId);
 
-      // Derive subscription PDA
+      // Step 2: Derive subscription PDA
       const [subscriptionPDA] = await subscriptionService.findSubscriptionStatePDA(
         new PublicKey(publicKey),
         merchantPubkey
       );
 
-      // Complete checkout session on backend
-      await fetch(
+      // Step 3: Create message to sign for wallet ownership proof
+      const timestamp = Date.now();
+      const message = `eventop-checkout:${sessionId}:${timestamp}`;
+
+      // Step 4: Sign the message with user's wallet
+      const walletSignature = await signMessageWithWallet(message);
+
+      // Step 5: Complete checkout session on backend with all security proofs
+      const completeResponse = await fetch(
         `https://api.eventop.xyz/checkout/${sessionId}/complete`,
         {
           method: 'POST',
@@ -173,10 +207,19 @@ export default function SubscribeFromWebScreen() {
           body: JSON.stringify({
             subscriptionPda: subscriptionPDA.toString(),
             userWallet: publicKey,
-            signature,
+            signature: signature, // Transaction signature
+            message: message, // The message that was signed
+            walletSignature: walletSignature, // Signature proving wallet ownership
           })
         }
       );
+
+      if (!completeResponse.ok) {
+        const errorData = await completeResponse.json();
+        throw new Error(errorData.message || 'Failed to complete checkout');
+      }
+
+      const result = await completeResponse.json();
 
       // Success! Show confirmation
       Alert.alert(
@@ -199,11 +242,24 @@ export default function SubscribeFromWebScreen() {
       );
 
     } catch (error: any) {
-      console.error('Subscription failed:', error);
+      console.error('❌ Subscription failed:', error);
+      
+      // Provide more specific error messages
+      let errorMessage = 'An error occurred. Please try again.';
+      
+      if (error.message?.includes('signature')) {
+        errorMessage = 'Failed to verify wallet signature. Please try again.';
+      } else if (error.message?.includes('Transaction')) {
+        errorMessage = 'Transaction failed on blockchain. Please check your balance and try again.';
+      } else if (error.message?.includes('expired')) {
+        errorMessage = 'Session expired. Please start over from the merchant website.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
       
       Alert.alert(
         'Subscription Failed',
-        error.message || 'An error occurred. Please try again.',
+        errorMessage,
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Retry', onPress: handleSubscribe }

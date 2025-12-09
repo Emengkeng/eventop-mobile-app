@@ -16,7 +16,7 @@ import { APP_CONFIG } from '@/config/app';
 
 const PROGRAM_ID = new PublicKey('GPVtSfXPiy8y4SkJrMC3VFyKUmGVhMrRbAp2NhiW1Ds2');
 
-const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
+export const USDC_MINT = new PublicKey('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU');
 
 export interface SubscriptionWalletData {
   owner: PublicKey;
