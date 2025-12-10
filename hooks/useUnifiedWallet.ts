@@ -4,7 +4,7 @@ import { PublicKey } from "@solana/web3.js";
 import React from "react";
 
 export function useUnifiedWallet() {
-  const { wallets } = useEmbeddedSolanaWallet();
+  const { wallets, create: createSolanaWallet } = useEmbeddedSolanaWallet();
   const privyWallet = wallets?.[0];
 
   const [balance, setBalance] = React.useState({
@@ -13,13 +13,43 @@ export function useUnifiedWallet() {
     committed: 0
   });
   const [loading, setLoading] = React.useState(false);
+  const [walletCreating, setWalletCreating] = React.useState(false);
+
+  const ensureWalletExists = async () => {
+    if (privyWallet?.publicKey) {
+      return privyWallet;
+    }
+
+    if (walletCreating) {
+      // Avoid multiple simultaneous wallet creation attempts
+      return null;
+    }
+
+    setWalletCreating(true);
+    try {
+      const newWallet = await createSolanaWallet?.({
+        createAdditional: false,
+        recoveryMethod: "privy",
+      });
+      return newWallet;
+    } catch (error) {
+      console.error('Error creating wallet:', error);
+      throw error;
+    } finally {
+      setWalletCreating(false);
+    }
+  };
 
   const refreshBalance = async () => {
-    if (!privyWallet?.publicKey) return;
-    
-    setLoading(true);
     try {
-      const bal = await UnifiedWalletService.getUnifiedBalance(privyWallet);
+      const wallet = await ensureWalletExists();
+      if (!privyWallet?.publicKey) {
+        console.warn('No wallet available to fetch balance');
+        return;
+      }
+
+      setLoading(true);
+      const bal = await UnifiedWalletService.getUnifiedBalance(wallet);
       setBalance(bal);
     } catch (error) {
       console.error('Error fetching balance:', error);
@@ -29,10 +59,12 @@ export function useUnifiedWallet() {
   };
 
   const deposit = async (amount: number) => {
-    if (!privyWallet) throw new Error('Wallet not connected');
+    const wallet = await ensureWalletExists();
+    if (!wallet) throw new Error('Wallet not available');
+
     setLoading(true);
     try {
-      const signature = await UnifiedWalletService.deposit(privyWallet, amount);
+      const signature = await UnifiedWalletService.deposit(wallet, amount);
       await refreshBalance();
       return signature;
     } finally {
@@ -41,10 +73,12 @@ export function useUnifiedWallet() {
   };
 
   const withdraw = async (amount: number) => {
-    if (!privyWallet) throw new Error('Wallet not connected');
+    const wallet = await ensureWalletExists();
+    if (!wallet) throw new Error('Wallet not available');
+
     setLoading(true);
     try {
-      const signature = await UnifiedWalletService.withdraw(privyWallet, amount);
+      const signature = await UnifiedWalletService.withdraw(wallet, amount);
       await refreshBalance();
       return signature;
     } finally {
@@ -53,11 +87,13 @@ export function useUnifiedWallet() {
   };
 
   const subscribe = async (merchantPubkey: PublicKey, planId: string) => {
-    if (!privyWallet) throw new Error('Wallet not connected');
+    const wallet = await ensureWalletExists();
+    if (!wallet) throw new Error('Wallet not available');
+
     setLoading(true);
     try {
       const signature = await UnifiedWalletService.subscribe(
-        privyWallet,
+        wallet,
         merchantPubkey,
         planId
       );
@@ -69,16 +105,20 @@ export function useUnifiedWallet() {
   };
 
   React.useEffect(() => {
-    refreshBalance();
+    if (privyWallet?.publicKey) {
+      refreshBalance();
+    }
   }, [privyWallet?.publicKey]);
 
   return {
     publicKey: privyWallet?.publicKey,
     balance,
     loading,
+    walletCreating,
     deposit,
     withdraw,
     subscribe,
-    refreshBalance
+    refreshBalance,
+    ensureWalletExists
   };
 }

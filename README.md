@@ -39,6 +39,11 @@ Update the `app.json` file with your Privy app credentials:
 }
 ```
 
+### 2. Apk Build with EAS
+
+```bash
+eas build --platform android --profile preview
+```
 **Important:**
 
 - Configure an app client in your [Privy Dashboard](https://dashboard.privy.io/apps?page=settings&setting=clients)

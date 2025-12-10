@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Wallet, Mail, Lock } from 'lucide-react-native';
-import { usePrivy, useLoginWithEmail, useLoginWithOAuth } from '@privy-io/expo';
+import { usePrivy, useLoginWithEmail, useLoginWithOAuth, useEmbeddedSolanaWallet } from '@privy-io/expo';
 import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { spacing } from '@/theme/spacing';
@@ -17,20 +17,48 @@ export default function LoginScreen() {
   const router = useRouter();
   const { user, getAccessToken } = usePrivy();
   const { setWallet } = useWalletStore();
-  const { login, state } = useLoginWithOAuth()
+  const { wallets, create: createSolanaWallet } = useEmbeddedSolanaWallet();
+  const { login, state } = useLoginWithOAuth();
   
   const [email, setEmail] = React.useState('');
   const [code, setCode] = React.useState('');
   const [showCodeInput, setShowCodeInput] = React.useState(false);
 
-  // Email login
+  const ensureWalletExists = async (userId: string, accessToken: string) => {
+    try {
+      // Check if wallet already exists
+      if (!wallets || wallets.length === 0) {
+        console.log('No wallet found, creating new Solana wallet...');
+        await createSolanaWallet?.({
+          createAdditional: false,
+          recoveryMethod: 'privy',
+        });
+        console.log('Wallet created successfully');
+      } else {
+        console.log('Wallet already exists');
+      }
+      
+      setWallet(userId, accessToken);
+      
+      router.replace('../(tabs)');
+    } catch (error) {
+      console.error('Error ensuring wallet exists:', error);
+      // Still navigate even if wallet creation fails
+      // User can retry wallet creation later
+      setWallet(userId, accessToken);
+      router.replace('../(tabs)');
+    }
+  };
+
   const { sendCode, loginWithCode, state: emailState } = useLoginWithEmail({
     onSendCodeSuccess: () => setShowCodeInput(true),
     onLoginSuccess: async (user, isNewUser) => {
-      // Get access token and store
-      const accessToken = await getAccessToken();
-      setWallet(user.id, accessToken!);
-      router.replace('../(tabs)');
+      try {
+        const accessToken = await getAccessToken();
+        await ensureWalletExists(user.id, accessToken!);
+      } catch (error) {
+        console.error('Post-login error:', error);
+      }
     },
     onError: (error) => {
       console.error('Email login error:', error);
@@ -41,12 +69,9 @@ export default function LoginScreen() {
     try {
       const user = await login({ provider: 'google' });
       const accessToken = await getAccessToken();
-      setWallet(user!.id, accessToken!);
-      router.replace('../(tabs)');
+      await ensureWalletExists(user!.id, accessToken!);
     } catch (error) {
-      console.error('Login failed', error);
       console.error('Google login error:', error);
-    } finally {
     }
   };
 
@@ -54,12 +79,9 @@ export default function LoginScreen() {
     try {
       const user = await login({ provider: 'twitter' });
       const accessToken = await getAccessToken();
-      setWallet(user!.id, accessToken!);
-      router.replace('../(tabs)');
+      await ensureWalletExists(user!.id, accessToken!);
     } catch (error) {
-      console.error('Login failed', error);
-      console.error('Google login error:', error);
-    } finally {
+      console.error('Twitter login error:', error);
     }
   };
 
