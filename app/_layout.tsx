@@ -122,6 +122,7 @@ function RootNavigator() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="auth/login" />
+      <Stack.Screen name="ping" />
       <Stack.Screen name="subscriptions/browse" />
       <Stack.Screen name="subscriptions/[id]" />
       <Stack.Screen name="subscribe/[sessionId]" />

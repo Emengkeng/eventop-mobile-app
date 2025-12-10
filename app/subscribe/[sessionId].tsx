@@ -17,7 +17,7 @@ import { ArrowLeft, AlertCircle } from 'lucide-react-native';
 import { useUnifiedWallet } from '@/hooks/useUnifiedWallet';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { subscriptionService } from '@/services/SubscriptionProtocolService';
+import { subscriptionService, USDC_MINT } from '@/services/SubscriptionProtocolService';
 import { PublicKey } from '@solana/web3.js';
 import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
@@ -28,23 +28,29 @@ import nacl from 'tweetnacl';
 
 interface CheckoutSession {
   sessionId: string;
-  merchantWallet: string;
-  planId: string;
   status: string;
   expiresAt: string;
   successUrl: string;
   cancelUrl: string;
   customerEmail: string;
+  customerId: string;
   subscriptionPda?: string;
   merchant: {
+    walletAddress: string; 
     companyName: string;
     logoUrl?: string;
   };
   plan: {
+    planPda: string;
+    planId: string;
     planName: string;
     feeAmount: string;
     paymentInterval: string;
     description?: string;
+  };
+  metadata?: {
+    email: string;
+    source: string;
   };
 }
 
@@ -80,6 +86,9 @@ export default function SubscribeFromWebScreen() {
       }
 
       const data = await response.json();
+
+       console.log('📦 Raw session data:', JSON.stringify(data, null, 2));
+        console.log('🔑 Merchant wallet value:', data.merchantWallet);
       setSession(data);
 
       // Validate session hasn't expired
@@ -159,16 +168,33 @@ export default function SubscribeFromWebScreen() {
     try {
       const privyWallet = wallets?.[0];
 
-      if (!privyWallet?.getProvider) return;
+      if (!privyWallet?.getProvider) {
+        throw new Error('Wallet provider not available');
+      }
+
       const provider = await privyWallet.getProvider?.();
-      if (!provider) return;
+      if (!provider) {
+        throw new Error('Failed to get wallet provider');
+      }
 
       const { signature } = await provider.request({
         method: "signMessage",
         params: { message },
       });
+
+      // Some providers return the signature directly or inside an object
+      // const signature = (response && typeof response === 'object' && 'signature' in response)
+      //   ? (response as any).signature
+      //   : response as string;
+
+      // if (!signature) {
+      //   throw new Error('No signature returned from wallet');
+      // }
       
-      return signature;
+      // Privy returns signature as a base64 string for React Native
+      // Convert base64 to base58 for backend verification
+      const signatureBytes = Buffer.from(signature, 'base64');
+      return bs58.encode(signatureBytes);
     } catch (error) {
       console.error('Error signing message:', error);
       throw new Error('Failed to sign message with wallet');
@@ -181,31 +207,51 @@ export default function SubscribeFromWebScreen() {
     setSubscribing(true);
 
     try {
-      // Step 1: Execute on-chain subscription transaction
-      const merchantPubkey = new PublicKey(session.merchantWallet);
-      const signature = await subscribe(merchantPubkey, session.planId);
+      // Step 1: Get merchant wallet from correct location
+      const merchantWalletAddress = session.merchant.walletAddress; // ✅ Changed this line
+      
+      if (!merchantWalletAddress) {
+        throw new Error('Merchant wallet address is missing');
+      }
 
-      // Step 2: Derive subscription PDA
-      const [subscriptionPDA] = await subscriptionService.findSubscriptionStatePDA(
+      console.log('🔑 Using merchant wallet:', merchantWalletAddress);
+
+      // Step 2: Create PublicKey and execute on-chain subscription transaction
+      const merchantPubkey = new PublicKey(merchantWalletAddress);
+      const signature = await subscribe(merchantPubkey, session.plan.planId);
+
+      // Step 3: Derive subscription PDA
+      const pdaResult = await subscriptionService.findSubscriptionStatePDA(
         new PublicKey(publicKey),
-        merchantPubkey
+        merchantPubkey,
+        USDC_MINT
       );
 
-      // Step 3: Create message to sign for wallet ownership proof
+      // Validate PDA was derived successfully
+      if (!pdaResult || !pdaResult[0]) {
+        throw new Error('Failed to derive subscription PDA');
+      }
+
+      const subscriptionPDA = pdaResult[0];
+      const subscriptionPDAString = subscriptionPDA.toString();
+
+      console.log('✅ Subscription PDA derived:', subscriptionPDAString);
+
+      // Step 4: Create message to sign for wallet ownership proof
       const timestamp = Date.now();
       const message = `eventop-checkout:${sessionId}:${timestamp}`;
 
-      // Step 4: Sign the message with user's wallet
+      // Step 5: Sign the message with user's wallet
       const walletSignature = await signMessageWithWallet(message);
 
-      // Step 5: Complete checkout session on backend with all security proofs
+      // Step 6: Complete checkout session on backend with all security proofs
       const completeResponse = await fetch(
         `https://api.eventop.xyz/checkout/${sessionId}/complete`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            subscriptionPda: subscriptionPDA.toString(),
+            subscriptionPda: subscriptionPDAString,
             userWallet: publicKey,
             signature: signature, // Transaction signature
             message: message, // The message that was signed
@@ -219,8 +265,6 @@ export default function SubscribeFromWebScreen() {
         throw new Error(errorData.message || 'Failed to complete checkout');
       }
 
-      const result = await completeResponse.json();
-
       // Success! Show confirmation
       Alert.alert(
         '🎉 Subscription Active!',
@@ -229,13 +273,14 @@ export default function SubscribeFromWebScreen() {
           {
             text: 'View Subscription',
             onPress: () => {
-              router.replace(`/subscriptions/${subscriptionPDA.toString()}`);
+              router.replace(`../subscriptions/${subscriptionPDAString}`);
             }
           },
           {
             text: 'Return to Merchant',
             onPress: () => {
               Linking.openURL(session.successUrl);
+              router.back();
             }
           },
         ]
@@ -247,7 +292,9 @@ export default function SubscribeFromWebScreen() {
       // Provide more specific error messages
       let errorMessage = 'An error occurred. Please try again.';
       
-      if (error.message?.includes('signature')) {
+      if (error.message?.includes('PDA')) {
+        errorMessage = 'Failed to create subscription address. Please try again.';
+      } else if (error.message?.includes('signature')) {
         errorMessage = 'Failed to verify wallet signature. Please try again.';
       } else if (error.message?.includes('Transaction')) {
         errorMessage = 'Transaction failed on blockchain. Please check your balance and try again.';

@@ -71,6 +71,26 @@ export interface SubscriptionResponse {
   createdAt: string;
 }
 
+export interface getUserSubscriptionResponse {
+  createdAt: Date;
+  merchantWallet: string;
+  mint: string;
+  feeAmount: string;
+  paymentInterval: string;
+  isActive: boolean;
+  customerEmail: string | null;
+  customerId: string | null;
+  subscriptionPda: string;
+  userWallet: string;
+  subscriptionWalletPda: string;
+  merchantPlanPda: string;
+  lastPaymentTimestamp: string;
+  totalPaid: string;
+  paymentCount: number;
+  updatedAt: Date;
+  cancelledAt: Date | null;
+}
+
 export interface WalletBalance {
   walletPda: string;
   ownerWallet: string;
@@ -94,8 +114,8 @@ export const apiService = {
   },
 
   // Subscriptions
-  getUserSubscriptions: async (userId: string) => {
-    const { data } = await api.get<SubscriptionResponse[]>(`/subscriptions/user/${userId}`);
+  getUserSubscriptions: async (wallet: string) => {
+    const { data } = await api.get<getUserSubscriptionResponse[]>(`/subscriptions/user/${wallet}`);
     return data;
   },
 
@@ -104,8 +124,8 @@ export const apiService = {
     return data;
   },
 
-  getUpcomingPayments: async (userId: string) => {
-    const { data } = await api.get(`/subscriptions/user/${userId}/upcoming`);
+  getUpcomingPayments: async (wallet: string) => {
+    const { data } = await api.get(`/subscriptions/user/${wallet}/upcoming`);
     return data;
   },
 
@@ -115,8 +135,8 @@ export const apiService = {
     return data;
   },
 
-  getUserStats: async (userId: string) => {
-    const { data } = await api.get(`/subscriptions/user/${userId}/stats`);
+  getUserStats: async (wallet: string) => {
+    const { data } = await api.get(`/subscriptions/user/${wallet}/stats`);
     return data;
   },
 };
