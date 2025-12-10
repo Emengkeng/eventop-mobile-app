@@ -6,7 +6,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Linking } from 'react-native';
 import { colors } from '@/theme/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -41,21 +41,75 @@ function RootNavigator() {
   }, [logout]);
 
   useEffect(() => {
+    const handleInitialURL = async () => {
+      const initialUrl = await Linking.getInitialURL();
+      if (initialUrl) {
+        handleDeepLink(initialUrl);
+      }
+    };
+
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      handleDeepLink(url);
+    });
+
+    handleInitialURL();
+
+    return () => {
+      subscription.remove();
+    };
+  }, [isReady, user]);
+
+  const handleDeepLink = (url: string) => {
+    if (!url) return;
+
+    console.log('📱 Deep link received:', url);
+
+    if (url.includes('eventop://ping')) {
+      console.log('✓ Ping received - app is installed');
+      return;
+    }
+
+    if (url.includes('eventop://subscribe')) {
+      const sessionId = url.split('sessionId=')[1]?.split('&')[0];
+      
+      if (sessionId) {
+        
+        if (!user) {
+          AsyncStorage.setItem('pendingDeepLink', url);
+        } else {
+          router.push(`/subscribe/${sessionId}`);
+        }
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!isReady || !user) return;
+
+    const checkPendingDeepLink = async () => {
+      const pendingUrl = await AsyncStorage.getItem('pendingDeepLink');
+      if (pendingUrl) {
+        await AsyncStorage.removeItem('pendingDeepLink');
+        handleDeepLink(pendingUrl);
+      }
+    };
+
+    checkPendingDeepLink();
+  }, [isReady, user]);
+
+  useEffect(() => {
     if (!isReady) return;
 
     const inAuthGroup = segments[0] === 'auth';
     const inTabsGroup = segments[0] === '(tabs)';
 
     if (!user && !inAuthGroup) {
-      // User is not authenticated and trying to access protected routes
       router.replace('/auth/login');
     } else if (user && inAuthGroup) {
-      // User is authenticated but on auth pages, redirect to home
       router.replace('/(tabs)');
     }
   }, [isReady, user, segments]);
 
-  // Show loading screen while Privy initializes
   if (!isReady) {
     return (
       <View style={styles.loadingContainer}>
@@ -70,6 +124,7 @@ function RootNavigator() {
       <Stack.Screen name="auth/login" />
       <Stack.Screen name="subscriptions/browse" />
       <Stack.Screen name="subscriptions/[id]" />
+      <Stack.Screen name="subscribe/[sessionId]" />
       <Stack.Screen name="wallet/deposit" />
       <Stack.Screen name="wallet/withdraw" />
       <Stack.Screen name="wallet/yield" />
