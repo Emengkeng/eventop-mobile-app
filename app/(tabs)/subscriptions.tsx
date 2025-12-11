@@ -14,6 +14,7 @@ import { useSubscriptions } from '@/hooks/useSubscriptions';
 export default function SubscriptionsScreen() {
   const router = useRouter();
   const { data: subscriptions, isLoading } = useSubscriptions();
+  console.log('Subscriptions data:', subscriptions);
 
   const activeSubscriptions = subscriptions?.filter((s: { isActive: any; }) => s.isActive) || [];
   const inactiveSubscriptions = subscriptions?.filter((s: { isActive: any; }) => !s.isActive) || [];

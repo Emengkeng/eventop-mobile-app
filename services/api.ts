@@ -1,9 +1,8 @@
 import axios from 'axios';
 import { useWalletStore } from '@/store/walletStore';
+import { APP_CONFIG } from '@/config/app';
 
-const API_URL = __DEV__ 
-  ? 'http://localhost:3001' 
-  : 'https://eventop-server-app-production.up.railway.app';
+const API_URL = APP_CONFIG.APP_URL || 'https://api.eventop.xyz';
 
 export const api = axios.create({
   baseURL: API_URL,
@@ -13,10 +12,10 @@ export const api = axios.create({
   },
 });
 
-// Add auth token to all requests
 api.interceptors.request.use(
   (config) => {
-    const authToken = useWalletStore.getState().authToken;
+    const { authToken } = useWalletStore.getState();
+    
     if (authToken) {
       config.headers.Authorization = `Bearer ${authToken}`;
     }
@@ -27,21 +26,17 @@ api.interceptors.request.use(
   }
 );
 
-// Handle 401 errors (token expired)
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      // Token expired - need to refresh or logout
       const { disconnect } = useWalletStore.getState();
       disconnect();
-      // Optionally redirect to login
     }
     return Promise.reject(error);
   }
 );
 
-// API Types
 export interface MerchantPlan {
   planPda: string;
   merchantWallet: string;
@@ -100,9 +95,7 @@ export interface WalletBalance {
   totalSpent: string;
 }
 
-// API Functions
 export const apiService = {
-  // Plans
   getPlans: async (params?: { category?: string; search?: string }) => {
     const { data } = await api.get<MerchantPlan[]>('/merchants/plans/search', { params });
     return data;
@@ -113,9 +106,9 @@ export const apiService = {
     return data;
   },
 
-  // Subscriptions
   getUserSubscriptions: async (wallet: string) => {
     const { data } = await api.get<getUserSubscriptionResponse[]>(`/subscriptions/user/${wallet}`);
+    console.log('Fetched user subscriptions:', data);
     return data;
   },
 
@@ -129,7 +122,6 @@ export const apiService = {
     return data;
   },
 
-  // Wallet
   getWalletBalance: async (walletPda: string) => {
     const { data } = await api.get<WalletBalance>(`/subscriptions/wallet/${walletPda}/balance`);
     return data;

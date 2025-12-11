@@ -2,6 +2,7 @@ import { UnifiedWalletService } from "@/services/UnifiedWalletService";
 import { useEmbeddedSolanaWallet } from "@privy-io/expo";
 import { PublicKey } from "@solana/web3.js";
 import React from "react";
+import { subscriptionService } from "@/services/SubscriptionProtocolService";
 
 export function useUnifiedWallet() {
   const { wallets, create: createSolanaWallet } = useEmbeddedSolanaWallet();
@@ -21,7 +22,6 @@ export function useUnifiedWallet() {
     }
 
     if (walletCreating) {
-      // Avoid multiple simultaneous wallet creation attempts
       return null;
     }
 
@@ -88,10 +88,39 @@ export function useUnifiedWallet() {
 
   const subscribe = async (merchantPubkey: PublicKey, planId: string) => {
     const wallet = await ensureWalletExists();
-    if (!wallet) throw new Error('Wallet not available');
+    if (!privyWallet?.publicKey) throw new Error('Wallet not available');
 
     setLoading(true);
     try {
+      const userPubkey = new PublicKey(privyWallet?.publicKey);
+      const [subscriptionPDA] = await subscriptionService.findSubscriptionStatePDA(
+        userPubkey,
+        merchantPubkey,
+        subscriptionService.usdcMint
+      );
+
+      console.log('🔍 Checking if subscription exists:', subscriptionPDA.toString());
+
+      // Try to fetch existing subscription
+      const existingSubscription = await subscriptionService.getSubscriptionState(subscriptionPDA);
+
+      if (existingSubscription) {
+        if (existingSubscription.isActive) {
+          // Subscription already exists and is active - return PDA for navigation
+          const error: any = new Error('SUBSCRIPTION_ALREADY_EXISTS');
+          error.subscriptionPDA = subscriptionPDA.toString();
+          error.existingSubscription = existingSubscription;
+          throw error;
+        } else {
+          // Subscription exists but is cancelled
+          const error: any = new Error('SUBSCRIPTION_WAS_CANCELLED');
+          error.subscriptionPDA = subscriptionPDA.toString();
+          throw error;
+        }
+      }
+
+      // No existing subscription found, proceed with creation
+      console.log('✅ No existing subscription found, proceeding...');
       const signature = await UnifiedWalletService.subscribe(
         wallet,
         merchantPubkey,
@@ -99,6 +128,22 @@ export function useUnifiedWallet() {
       );
       await refreshBalance();
       return signature;
+    } catch (error: any) {
+      console.error('❌ Subscribe error:', error);
+      
+      // Re-throw with more context
+      if (error.message === 'SUBSCRIPTION_ALREADY_EXISTS') {
+        const enhancedError: any = new Error('You already have an active subscription to this merchant. You must cancel your existing subscription before subscribing to a different plan.');
+        enhancedError.subscriptionPDA = error.subscriptionPDA;
+        enhancedError.existingSubscription = error.existingSubscription;
+        throw enhancedError;
+      } else if (error.message === 'SUBSCRIPTION_WAS_CANCELLED') {
+        const enhancedError: any = new Error('You previously cancelled a subscription to this merchant. Please contact support to reactivate or create a new subscription.');
+        enhancedError.subscriptionPDA = error.subscriptionPDA;
+        throw enhancedError;
+      }
+      
+      throw error;
     } finally {
       setLoading(false);
     }

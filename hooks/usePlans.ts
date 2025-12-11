@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { APP_CONFIG } from '@/config/app';
+import { usePrivy } from '@privy-io/expo';
 
 interface PlanFilters {
   search?: string;

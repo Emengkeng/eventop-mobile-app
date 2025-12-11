@@ -60,7 +60,7 @@ export interface SubscriptionStateData {
 export class SubscriptionProtocolService {
   public connection: Connection;
   private programId: PublicKey;
-  private usdcMint: PublicKey;
+  public usdcMint: PublicKey;
 
   constructor(
     rpcUrl: string = APP_CONFIG.RPC_URL || 'https://api.devnet.solana.com',

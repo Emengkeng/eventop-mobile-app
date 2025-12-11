@@ -60,6 +60,9 @@ export default function SubscribeFromWebScreen() {
   const { wallets } = useEmbeddedSolanaWallet();
   const { publicKey, balance, subscribe, loading: walletLoading } = useUnifiedWallet();
 
+  const [existingSubscription, setExistingSubscription] = useState<any>(null);
+  const [checkingExisting, setCheckingExisting] = useState(false);
+
   const [session, setSession] = useState<CheckoutSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState(false);
@@ -70,10 +73,44 @@ export default function SubscribeFromWebScreen() {
   const hasEnoughBalance = balance.available >= requiredBalance;
 
   useEffect(() => {
-    if (sessionId) {
+    if (sessionId && publicKey && isConnected) {
       loadCheckoutSession();
+      checkForExistingSubscription();
     }
-  }, [sessionId]);
+  }, [sessionId, publicKey, isConnected]);
+
+  const checkForExistingSubscription = async () => {
+    if (!session || !publicKey) return;
+
+    setCheckingExisting(true);
+    try {
+      const merchantPubkey = new PublicKey(session.merchant.walletAddress);
+      const [subscriptionPDA] = await subscriptionService.findSubscriptionStatePDA(
+        new PublicKey(publicKey),
+        merchantPubkey,
+        USDC_MINT
+      );
+
+      console.log('🔍 Checking for existing subscription:', subscriptionPDA.toString());
+      
+      const existing = await subscriptionService.getSubscriptionState(subscriptionPDA);
+      
+      if (existing && existing.isActive) {
+        console.log('⚠️ Found existing active subscription');
+        setExistingSubscription({
+          pda: subscriptionPDA.toString(),
+          data: existing
+        });
+      } else {
+        setExistingSubscription(null);
+      }
+    } catch (error) {
+      console.log('✅ No existing subscription found');
+      setExistingSubscription(null);
+    } finally {
+      setCheckingExisting(false);
+    }
+  };
 
   const loadCheckoutSession = async () => {
     try {
@@ -208,7 +245,7 @@ export default function SubscribeFromWebScreen() {
 
     try {
       // Step 1: Get merchant wallet from correct location
-      const merchantWalletAddress = session.merchant.walletAddress; // ✅ Changed this line
+      const merchantWalletAddress = session.merchant.walletAddress;
       
       if (!merchantWalletAddress) {
         throw new Error('Merchant wallet address is missing');
@@ -218,6 +255,8 @@ export default function SubscribeFromWebScreen() {
 
       // Step 2: Create PublicKey and execute on-chain subscription transaction
       const merchantPubkey = new PublicKey(merchantWalletAddress);
+      
+      // ✅ THIS WILL NOW CHECK IF SUBSCRIPTION EXISTS BEFORE CREATING
       const signature = await subscribe(merchantPubkey, session.plan.planId);
 
       // Step 3: Derive subscription PDA
@@ -227,7 +266,6 @@ export default function SubscribeFromWebScreen() {
         USDC_MINT
       );
 
-      // Validate PDA was derived successfully
       if (!pdaResult || !pdaResult[0]) {
         throw new Error('Failed to derive subscription PDA');
       }
@@ -253,9 +291,9 @@ export default function SubscribeFromWebScreen() {
           body: JSON.stringify({
             subscriptionPda: subscriptionPDAString,
             userWallet: publicKey,
-            signature: signature, // Transaction signature
-            message: message, // The message that was signed
-            walletSignature: walletSignature, // Signature proving wallet ownership
+            signature: signature,
+            message: message,
+            walletSignature: walletSignature,
           })
         }
       );
@@ -289,10 +327,60 @@ export default function SubscribeFromWebScreen() {
     } catch (error: any) {
       console.error('❌ Subscription failed:', error);
       
-      // Provide more specific error messages
       let errorMessage = 'An error occurred. Please try again.';
+      let errorTitle = 'Subscription Failed';
+      let showRetry = true;
       
-      if (error.message?.includes('PDA')) {
+      // ✅ HANDLE THE SPECIFIC ERROR CASES
+      if (error.message?.includes('already have an active subscription')) {
+        errorTitle = '⚠️ Already Subscribed';
+        errorMessage = error.message;
+        showRetry = false;
+        
+        // Offer to view existing subscription or cancel it
+        Alert.alert(
+          errorTitle,
+          errorMessage,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'View Current Subscription',
+              onPress: () => {
+                if (error.subscriptionPDA) {
+                  router.replace(`../subscriptions/${error.subscriptionPDA}`);
+                }
+              }
+            },
+            {
+              text: 'Manage Subscriptions',
+              onPress: () => {
+                router.replace('/subscriptions');
+              }
+            }
+          ]
+        );
+        return;
+      } else if (error.message?.includes('previously cancelled')) {
+        errorTitle = 'Subscription Cancelled';
+        errorMessage = error.message;
+        showRetry = false;
+        
+        Alert.alert(
+          errorTitle,
+          errorMessage,
+          [
+            { text: 'OK', style: 'cancel' },
+            {
+              text: 'Contact Support',
+              onPress: () => {
+                // You can add support email/link here
+                Linking.openURL('mailto:support@eventop.xyz');
+              }
+            }
+          ]
+        );
+        return;
+      } else if (error.message?.includes('PDA')) {
         errorMessage = 'Failed to create subscription address. Please try again.';
       } else if (error.message?.includes('signature')) {
         errorMessage = 'Failed to verify wallet signature. Please try again.';
@@ -300,18 +388,17 @@ export default function SubscribeFromWebScreen() {
         errorMessage = 'Transaction failed on blockchain. Please check your balance and try again.';
       } else if (error.message?.includes('expired')) {
         errorMessage = 'Session expired. Please start over from the merchant website.';
+        showRetry = false;
       } else if (error.message) {
         errorMessage = error.message;
       }
       
-      Alert.alert(
-        'Subscription Failed',
-        errorMessage,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Retry', onPress: handleSubscribe }
-        ]
-      );
+      const buttons: any[] = [{ text: 'Cancel', style: 'cancel' }];
+      if (showRetry) {
+        buttons.push({ text: 'Retry', onPress: handleSubscribe });
+      }
+      
+      Alert.alert(errorTitle, errorMessage, buttons);
     } finally {
       setSubscribing(false);
     }
@@ -503,24 +590,48 @@ export default function SubscribeFromWebScreen() {
           </View>
         )}
 
+        {/* Existing Subscription Warning */}
+        {isConnected && existingSubscription && (
+          <View style={styles.errorBox}>
+            <AlertCircle size={20} color="#ef4444" />
+            <View style={styles.errorContent}>
+              <Text style={styles.errorTitle}>Already Subscribed</Text>
+              <Text style={styles.errorText}>
+                You already have an active subscription to {session.merchant.companyName}.
+                {'\n\n'}
+                You must cancel your current subscription before subscribing to a different plan.
+              </Text>
+              <Button
+                variant="outline"
+                onPress={() => router.push(`/subscriptions/${existingSubscription.pda}`)}
+                style={{ marginTop: spacing.md }}
+              >
+                View Current Subscription
+              </Button>
+            </View>
+          </View>
+        )}
+
         {/* Actions */}
         {isConnected ? (
-          <Button
-            onPress={handleSubscribe}
-            loading={subscribing || walletLoading}
-            disabled={subscribing || walletLoading}
-            style={styles.subscribeButton}
-          >
-            {subscribing 
+        <Button
+          onPress={handleSubscribe}
+          loading={subscribing || walletLoading}
+          disabled={subscribing || walletLoading || !!existingSubscription}
+          style={styles.subscribeButton}
+        >
+          {existingSubscription
+            ? 'Already Subscribed to This Merchant'
+            : subscribing 
               ? 'Processing...' 
               : `Subscribe for $${monthlyFee.toFixed(2)}/mo`
-            }
-          </Button>
-        ) : (
-          <Button onPress={() => router.push('/profile')}>
-            Connect Wallet
-          </Button>
-        )}
+          }
+        </Button>
+      ) : (
+        <Button onPress={() => router.push('/profile')}>
+          Connect Wallet
+        </Button>
+      )}
 
         <Button
           variant="outline"
@@ -720,5 +831,28 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
     textAlign: 'center',
     marginTop: spacing.md,
+  },
+  errorBox: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    padding: spacing.lg,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+    alignItems: 'flex-start',
+  },
+  errorContent: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  errorTitle: {
+    ...typography.bodyMedium,
+    color: '#ef4444',
+  },
+  errorText: {
+    ...typography.small,
+    color: colors.mutedForeground,
+    lineHeight: 20,
   },
 });
