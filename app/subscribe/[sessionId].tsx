@@ -230,8 +230,9 @@ export default function SubscribeFromWebScreen() {
       
       // Privy returns signature as a base64 string for React Native
       // Convert base64 to base58 for backend verification
-      const signatureBytes = Buffer.from(signature, 'base64');
-      return bs58.encode(signatureBytes);
+      // const signatureBytes = Buffer.from(signature, 'base64');
+      // return bs58.encode(signatureBytes);
+      return signature;
     } catch (error) {
       console.error('Error signing message:', error);
       throw new Error('Failed to sign message with wallet');
@@ -281,6 +282,7 @@ export default function SubscribeFromWebScreen() {
 
       // Step 5: Sign the message with user's wallet
       const walletSignature = await signMessageWithWallet(message);
+      console.log('walletSignature:', walletSignature);
 
       // Step 6: Complete checkout session on backend with all security proofs
       const completeResponse = await fetch(
