@@ -86,7 +86,7 @@ export function useUnifiedWallet() {
     }
   };
 
-  const subscribe = async (merchantPubkey: PublicKey, planId: string) => {
+  const subscribe = async (merchantPubkey: PublicKey, planId: string, sessionId: string) => {
     const wallet = await ensureWalletExists();
     if (!privyWallet?.publicKey) throw new Error('Wallet not available');
 
@@ -124,7 +124,8 @@ export function useUnifiedWallet() {
       const signature = await UnifiedWalletService.subscribe(
         wallet,
         merchantPubkey,
-        planId
+        planId,
+        sessionId
       );
       await refreshBalance();
       return signature;

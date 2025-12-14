@@ -200,10 +200,14 @@ export default function SubscribeFromWebScreen() {
         throw new Error('Merchant wallet address is missing');
       }
 
+      if (!sessionId || typeof sessionId !== 'string') {
+        throw new Error('Invalid session ID');
+      }
+
       const merchantPubkey = new PublicKey(merchantWalletAddress);
       
       // Execute on-chain subscription transaction
-      const signature = await subscribe(merchantPubkey, session.plan.planId);
+      const signature = await subscribe(merchantPubkey, session.plan.planId, sessionId as string);
 
       // Derive subscription PDA
       const pdaResult = await subscriptionService.findSubscriptionStatePDA(

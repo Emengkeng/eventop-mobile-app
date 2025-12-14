@@ -190,8 +190,12 @@ export class UnifiedWalletService {
   static async subscribe(
     privyWallet: any,
     merchantPublicKey: PublicKey,
-    planId: string
+    planId: string,
+    sessionToken: string
   ): Promise<string> {
+    if (!sessionToken || sessionToken.trim() === '') {
+      throw new Error('Session token is required for subscription');
+    }
     // Ensure subscription wallet exists
     await this.prepareForSubscriptionOperation(privyWallet);
 
@@ -201,7 +205,8 @@ export class UnifiedWalletService {
     const transaction = await subscriptionService.subscribeWithWallet(
       userPubkey,
       merchantPublicKey,
-      planId
+      planId,
+      sessionToken
     );
 
     const { signature } = await provider.request({

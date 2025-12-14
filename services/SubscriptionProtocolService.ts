@@ -319,8 +319,17 @@ export class SubscriptionProtocolService {
   async subscribeWithWallet(
     userPublicKey: PublicKey,
     merchantPublicKey: PublicKey,
-    planId: string
+    planId: string,
+    sessionToken: string
   ): Promise<Transaction> {
+    if (!sessionToken || sessionToken.trim() === '') {
+      throw new Error('Session token is required');
+    }
+
+    if (sessionToken.length > 64) {
+      throw new Error('Session token exceeds maximum length (64 characters)');
+    }
+
     const [subscriptionWalletPDA] = await this.findSubscriptionWalletPDA(
       userPublicKey,
       this.usdcMint
@@ -350,18 +359,24 @@ export class SubscriptionProtocolService {
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = userPublicKey;
 
-    const instructionData = Buffer.from([
-      8, 120, 11, 42, 170, 6, 72, 80 // subscribe_with_wallet discriminator
+    // Serialize session token: [length: u32][bytes: utf8]
+    const sessionTokenBytes = Buffer.from(sessionToken, 'utf8');
+    const sessionTokenLength = Buffer.alloc(4);
+    sessionTokenLength.writeUInt32LE(sessionTokenBytes.length, 0);
+    
+    const instructionData = Buffer.concat([
+      Buffer.from([8, 120, 11, 42, 170, 6, 72, 80]), // discriminator
+      sessionTokenLength,
+      sessionTokenBytes
     ]);
 
-    // CORRECTED ORDER TO MATCH IDL
     const keys = [
       { pubkey: subscriptionStatePDA, isSigner: false, isWritable: true },
       { pubkey: subscriptionWalletPDA, isSigner: false, isWritable: true },
       { pubkey: merchantPlanPDA, isSigner: false, isWritable: true },
       { pubkey: userPublicKey, isSigner: true, isWritable: true },
       { pubkey: walletTokenAccount, isSigner: false, isWritable: false },
-      { pubkey: PublicKey.default, isSigner: false, isWritable: false }, // wallet_yield_vault
+      { pubkey: PublicKey.default, isSigner: false, isWritable: false },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ];
 
