@@ -23,8 +23,6 @@ import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { spacing } from '@/theme/spacing';
 import { radius } from '@/theme/radius';
-import * as bs58 from 'bs58';
-import nacl from 'tweetnacl';
 
 interface CheckoutSession {
   sessionId: string;
@@ -57,7 +55,6 @@ interface CheckoutSession {
 export default function SubscribeFromWebScreen() {
   const { sessionId } = useLocalSearchParams();
   const router = useRouter();
-  const { wallets } = useEmbeddedSolanaWallet();
   const { publicKey, balance, subscribe, loading: walletLoading } = useUnifiedWallet();
 
   const [existingSubscription, setExistingSubscription] = useState<any>(null);
@@ -91,12 +88,9 @@ export default function SubscribeFromWebScreen() {
         USDC_MINT
       );
 
-      console.log('🔍 Checking for existing subscription:', subscriptionPDA.toString());
-      
       const existing = await subscriptionService.getSubscriptionState(subscriptionPDA);
       
       if (existing && existing.isActive) {
-        console.log('⚠️ Found existing active subscription');
         setExistingSubscription({
           pda: subscriptionPDA.toString(),
           data: existing
@@ -105,7 +99,6 @@ export default function SubscribeFromWebScreen() {
         setExistingSubscription(null);
       }
     } catch (error) {
-      console.log('✅ No existing subscription found');
       setExistingSubscription(null);
     } finally {
       setCheckingExisting(false);
@@ -123,9 +116,6 @@ export default function SubscribeFromWebScreen() {
       }
 
       const data = await response.json();
-
-       console.log('📦 Raw session data:', JSON.stringify(data, null, 2));
-        console.log('🔑 Merchant wallet value:', data.merchantWallet);
       setSession(data);
 
       // Validate session hasn't expired
@@ -198,69 +188,24 @@ export default function SubscribeFromWebScreen() {
     );
   };
 
-  /**
-   * Sign a message with the user's wallet to prove ownership
-   */
-  const signMessageWithWallet = async (message: string): Promise<string> => {
-    try {
-      const privyWallet = wallets?.[0];
-
-      if (!privyWallet?.getProvider) {
-        throw new Error('Wallet provider not available');
-      }
-
-      const provider = await privyWallet.getProvider?.();
-      if (!provider) {
-        throw new Error('Failed to get wallet provider');
-      }
-
-      const { signature } = await provider.request({
-        method: "signMessage",
-        params: { message },
-      });
-
-      // Some providers return the signature directly or inside an object
-      // const signature = (response && typeof response === 'object' && 'signature' in response)
-      //   ? (response as any).signature
-      //   : response as string;
-
-      // if (!signature) {
-      //   throw new Error('No signature returned from wallet');
-      // }
-      
-      // Privy returns signature as a base64 string for React Native
-      // Convert base64 to base58 for backend verification
-      // const signatureBytes = Buffer.from(signature, 'base64');
-      // return bs58.encode(signatureBytes);
-      return signature;
-    } catch (error) {
-      console.error('Error signing message:', error);
-      throw new Error('Failed to sign message with wallet');
-    }
-  };
-
   const executeSubscription = async () => {
     if (!session || !publicKey) return;
 
     setSubscribing(true);
 
     try {
-      // Step 1: Get merchant wallet from correct location
       const merchantWalletAddress = session.merchant.walletAddress;
       
       if (!merchantWalletAddress) {
         throw new Error('Merchant wallet address is missing');
       }
 
-      console.log('🔑 Using merchant wallet:', merchantWalletAddress);
-
-      // Step 2: Create PublicKey and execute on-chain subscription transaction
       const merchantPubkey = new PublicKey(merchantWalletAddress);
       
-      // ✅ THIS WILL NOW CHECK IF SUBSCRIPTION EXISTS BEFORE CREATING
+      // Execute on-chain subscription transaction
       const signature = await subscribe(merchantPubkey, session.plan.planId);
 
-      // Step 3: Derive subscription PDA
+      // Derive subscription PDA
       const pdaResult = await subscriptionService.findSubscriptionStatePDA(
         new PublicKey(publicKey),
         merchantPubkey,
@@ -274,41 +219,41 @@ export default function SubscribeFromWebScreen() {
       const subscriptionPDA = pdaResult[0];
       const subscriptionPDAString = subscriptionPDA.toString();
 
-      console.log('✅ Subscription PDA derived:', subscriptionPDAString);
+      console.log('✅ Subscription PDA:', subscriptionPDAString);
+      console.log('✅ Transaction signature:', signature);
 
-      // Step 4: Create message to sign for wallet ownership proof
-      const timestamp = Date.now();
-      const message = `eventop-checkout:${sessionId}:${timestamp}`;
+      // ============================================
+      // OPTIONAL: Notify backend for instant UX
+      // This is just a hint - indexer will verify
+      // ============================================
+      try {
+        const completeResponse = await fetch(
+          `https://api.eventop.xyz/checkout/${sessionId}/complete`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              subscriptionPda: subscriptionPDAString,
+              userWallet: publicKey,
+              signature: signature,
+            })
+          }
+        );
 
-      // Step 5: Sign the message with user's wallet
-      const walletSignature = await signMessageWithWallet(message);
-      console.log('walletSignature:', walletSignature);
-
-      // Step 6: Complete checkout session on backend with all security proofs
-      const completeResponse = await fetch(
-        `https://api.eventop.xyz/checkout/${sessionId}/complete`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            subscriptionPda: subscriptionPDAString,
-            userWallet: publicKey,
-            signature: signature,
-            message: message,
-            walletSignature: walletSignature,
-          })
+        if (completeResponse.ok) {
+          console.log('✅ Session linked immediately');
+        } else {
+          console.log('⚠️  Session link failed, but indexer will handle it');
         }
-      );
-
-      if (!completeResponse.ok) {
-        const errorData = await completeResponse.json();
-        throw new Error(errorData.message || 'Failed to complete checkout');
+      } catch (linkError) {
+        // Non-critical - indexer will auto-link
+        console.log('⚠️  Could not notify backend, but indexer will auto-link');
       }
 
       // Success! Show confirmation
       Alert.alert(
         '🎉 Subscription Active!',
-        `You're now subscribed to ${session.plan.planName} from ${session.merchant.companyName}`,
+        `You're now subscribed to ${session.plan.planName} from ${session.merchant.companyName}\n\nThe subscription will be processed within a few seconds.`,
         [
           {
             text: 'View Subscription',
@@ -333,13 +278,11 @@ export default function SubscribeFromWebScreen() {
       let errorTitle = 'Subscription Failed';
       let showRetry = true;
       
-      // ✅ HANDLE THE SPECIFIC ERROR CASES
       if (error.message?.includes('already have an active subscription')) {
         errorTitle = '⚠️ Already Subscribed';
         errorMessage = error.message;
         showRetry = false;
         
-        // Offer to view existing subscription or cancel it
         Alert.alert(
           errorTitle,
           errorMessage,
@@ -353,12 +296,6 @@ export default function SubscribeFromWebScreen() {
                 }
               }
             },
-            {
-              text: 'Manage Subscriptions',
-              onPress: () => {
-                router.replace('/subscriptions');
-              }
-            }
           ]
         );
         return;
@@ -366,31 +303,8 @@ export default function SubscribeFromWebScreen() {
         errorTitle = 'Subscription Cancelled';
         errorMessage = error.message;
         showRetry = false;
-        
-        Alert.alert(
-          errorTitle,
-          errorMessage,
-          [
-            { text: 'OK', style: 'cancel' },
-            {
-              text: 'Contact Support',
-              onPress: () => {
-                // You can add support email/link here
-                Linking.openURL('mailto:support@eventop.xyz');
-              }
-            }
-          ]
-        );
-        return;
-      } else if (error.message?.includes('PDA')) {
-        errorMessage = 'Failed to create subscription address. Please try again.';
-      } else if (error.message?.includes('signature')) {
-        errorMessage = 'Failed to verify wallet signature. Please try again.';
       } else if (error.message?.includes('Transaction')) {
         errorMessage = 'Transaction failed on blockchain. Please check your balance and try again.';
-      } else if (error.message?.includes('expired')) {
-        errorMessage = 'Session expired. Please start over from the merchant website.';
-        showRetry = false;
       } else if (error.message) {
         errorMessage = error.message;
       }
@@ -600,8 +514,6 @@ export default function SubscribeFromWebScreen() {
               <Text style={styles.errorTitle}>Already Subscribed</Text>
               <Text style={styles.errorText}>
                 You already have an active subscription to {session.merchant.companyName}.
-                {'\n\n'}
-                You must cancel your current subscription before subscribing to a different plan.
               </Text>
               <Button
                 variant="outline"
@@ -642,11 +554,6 @@ export default function SubscribeFromWebScreen() {
         >
           Cancel
         </Button>
-
-        {/* Session Info */}
-        <Text style={styles.sessionInfo}>
-          Session ID: {sessionId}
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -826,12 +733,6 @@ const styles = StyleSheet.create({
     color: colors.mutedForeground,
   },
   subscribeButton: {
-    marginTop: spacing.md,
-  },
-  sessionInfo: {
-    ...typography.caption,
-    color: colors.mutedForeground,
-    textAlign: 'center',
     marginTop: spacing.md,
   },
   errorBox: {
