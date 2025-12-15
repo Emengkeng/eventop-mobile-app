@@ -223,13 +223,13 @@ export class SubscriptionProtocolService {
     const ix = await this.program.methods
       .createSubscriptionWallet()
       .accounts({
-        subscriptionWallet: subscriptionWalletPDA,
+        // subscriptionWallet: subscriptionWalletPDA,
         mainTokenAccount: mainTokenAccount,
         user: userPublicKey,
         mint: this.usdcMint,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-        rent: SYSVAR_RENT_PUBKEY,
+       // tokenProgram: TOKEN_PROGRAM_ID,
+       // systemProgram: SystemProgram.programId,
+       // rent: SYSVAR_RENT_PUBKEY,
       })
       .instruction();
 
@@ -273,12 +273,12 @@ export class SubscriptionProtocolService {
     const ix = await this.program.methods
       .depositToWallet(amountBN)
       .accounts({
-        subscriptionWallet: subscriptionWalletPDA,
+        // subscriptionWallet: subscriptionWalletPDA,
         user: userPublicKey,
         userTokenAccount: userTokenAccount,
         walletTokenAccount: walletTokenAccount,
         yieldVaultAccount: PublicKey.default,
-        tokenProgram: TOKEN_PROGRAM_ID,
+        // tokenProgram: TOKEN_PROGRAM_ID,
       })
       .instruction();
 
@@ -323,12 +323,12 @@ export class SubscriptionProtocolService {
     const ix = await this.program.methods
       .withdrawFromWallet(amountBN)
       .accounts({
-        subscriptionWallet: subscriptionWalletPDA,
-        owner: userPublicKey,
+        // subscriptionWallet: subscriptionWalletPDA,
+        // owner: userPublicKey,
         userTokenAccount: userTokenAccount,
         walletTokenAccount: walletTokenAccount,
         yieldVaultAccount: PublicKey.default,
-        tokenProgram: TOKEN_PROGRAM_ID,
+        // tokenProgram: TOKEN_PROGRAM_ID,
       })
       .instruction();
 
@@ -390,88 +390,14 @@ export class SubscriptionProtocolService {
     const ix = await this.program.methods
       .subscribeWithWallet(sessionToken)
       .accounts({
-        subscriptionState: subscriptionStatePDA,
-        sessionTokenTracker: sessionTokenTrackerPDA,
-        subscriptionWallet: subscriptionWalletPDA,
+        //subscriptionState: subscriptionStatePDA,
+        //sessionTokenTracker: sessionTokenTrackerPDA,
+        //subscriptionWallet: subscriptionWalletPDA,
         merchantPlan: merchantPlanPDA,
         user: userPublicKey,
         walletTokenAccount: walletTokenAccount,
         walletYieldVault: PublicKey.default,
-        systemProgram: SystemProgram.programId,
-      })
-      .instruction();
-
-    transaction.add(ix);
-
-    return transaction;
-  }
-
-  /**
-   * Execute payment from wallet transaction
-   */
-  async executePayment(
-    userPublicKey: PublicKey,
-    merchantPublicKey: PublicKey
-  ): Promise<Transaction> {
-    const [subscriptionWalletPDA] = await this.findSubscriptionWalletPDA(
-      userPublicKey,
-      this.usdcMint
-    );
-
-    const [subscriptionStatePDA] = await this.findSubscriptionStatePDA(
-      userPublicKey,
-      merchantPublicKey,
-      this.usdcMint
-    );
-
-    const [protocolConfigPDA] = await this.findProtocolConfigPDA();
-
-    // Get subscription data to find merchant plan
-    const subscriptionData = await this.getSubscriptionState(subscriptionStatePDA);
-    if (!subscriptionData) {
-      throw new Error('Subscription not found');
-    }
-
-    const walletTokenAccount = await getAssociatedTokenAddress(
-      this.usdcMint,
-      subscriptionWalletPDA,
-      true
-    );
-
-    const merchantTokenAccount = await getAssociatedTokenAddress(
-      this.usdcMint,
-      merchantPublicKey
-    );
-
-    // Get protocol config to find treasury
-    const protocolConfig = await this.getProtocolConfig();
-    if (!protocolConfig) {
-      throw new Error('Protocol config not found');
-    }
-
-    const protocolTreasury = await getAssociatedTokenAddress(
-      this.usdcMint,
-      protocolConfig.treasury
-    );
-
-    const transaction = new Transaction();
-    const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('finalized');
-    
-    transaction.recentBlockhash = blockhash;
-    transaction.lastValidBlockHeight = lastValidBlockHeight;
-    transaction.feePayer = userPublicKey;
-
-    const ix = await this.program.methods
-      .executePaymentFromWallet()
-      .accounts({
-        subscriptionState: subscriptionStatePDA,
-        subscriptionWallet: subscriptionWalletPDA,
-        merchantPlan: subscriptionData.merchantPlan,
-        protocolConfig: protocolConfigPDA,
-        walletTokenAccount: walletTokenAccount,
-        merchantTokenAccount: merchantTokenAccount,
-        protocolTreasury: protocolTreasury,
-        tokenProgram: TOKEN_PROGRAM_ID,
+       // systemProgram: SystemProgram.programId,
       })
       .instruction();
 
@@ -513,10 +439,10 @@ export class SubscriptionProtocolService {
     const ix = await this.program.methods
       .cancelSubscriptionWallet()
       .accounts({
-        subscriptionState: subscriptionStatePDA,
+       // subscriptionState: subscriptionStatePDA,
         subscriptionWallet: subscriptionWalletPDA,
         merchantPlan: subscriptionData.merchantPlan,
-        user: userPublicKey,
+       // user: userPublicKey,
       })
       .instruction();
 
