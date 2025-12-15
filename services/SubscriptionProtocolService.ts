@@ -13,6 +13,8 @@ import {
 } from '@solana/spl-token';
 import { BN, Program, AnchorProvider, Idl } from '@coral-xyz/anchor';
 import { APP_CONFIG } from '@/config/app';
+import localidl from '../idl/subscription_protocol.json';
+import type { SubscriptionProtocol } from '../types/subscription_protocol';
 
 const PROGRAM_ID = new PublicKey('GPVtSfXPiy8y4SkJrMC3VFyKUmGVhMrRbAp2NhiW1Ds2');
 
@@ -23,7 +25,7 @@ export interface SubscriptionWalletData {
   mainTokenAccount: PublicKey;
   mint: PublicKey;
   yieldVault: PublicKey;
-  yieldStrategy: number;
+  yieldStrategy: { none: {} } | { marginfiLend: {} } | { kaminoLend: {} } | { solendPool: {} } | { driftDeposit: {} };
   isYieldEnabled: boolean;
   totalSubscriptions: number;
   totalSpent: BN;
@@ -54,6 +56,7 @@ export interface SubscriptionStateData {
   totalPaid: BN;
   paymentCount: number;
   isActive: boolean;
+  sessionToken: string;
   bump: number;
 }
 
@@ -61,6 +64,7 @@ export class SubscriptionProtocolService {
   public connection: Connection;
   private programId: PublicKey;
   public usdcMint: PublicKey;
+  private program: Program<SubscriptionProtocol>;
 
   constructor(
     rpcUrl: string = APP_CONFIG.RPC_URL || 'https://api.devnet.solana.com',
@@ -70,6 +74,17 @@ export class SubscriptionProtocolService {
     this.connection = new Connection(rpcUrl, 'confirmed');
     this.programId = new PublicKey(programId);
     this.usdcMint = new PublicKey(usdcMint);
+
+    // Create a dummy provider for the program (we'll use manual transaction building)
+    const dummyProvider = {
+      connection: this.connection,
+      publicKey: PublicKey.default,
+    } as any;
+
+    this.program = new Program<SubscriptionProtocol>(
+      localidl as SubscriptionProtocol,
+      dummyProvider
+    );
   }
 
   // ============================================
@@ -131,6 +146,31 @@ export class SubscriptionProtocolService {
     );
   }
 
+  /**
+   * Derive Session Token Tracker PDA
+   */
+  async findSessionTokenTrackerPDA(
+    sessionToken: string
+  ): Promise<[PublicKey, number]> {
+    return PublicKey.findProgramAddressSync(
+      [
+        Buffer.from('session_token'),
+        Buffer.from(sessionToken),
+      ],
+      this.programId
+    );
+  }
+
+  /**
+   * Derive Protocol Config PDA
+   */
+  async findProtocolConfigPDA(): Promise<[PublicKey, number]> {
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from('protocol_config')],
+      this.programId
+    );
+  }
+
   // ============================================
   // TRANSACTION BUILDERS
   // ============================================
@@ -179,25 +219,21 @@ export class SubscriptionProtocolService {
       console.log('ATA already exists for subscription wallet');
     }
 
-    const instructionData = Buffer.from([
-      35, 43, 93, 123, 176, 230, 33, 157 // create_subscription_wallet discriminator
-    ]);
+    // Use Anchor's instruction builder
+    const ix = await this.program.methods
+      .createSubscriptionWallet()
+      .accounts({
+        subscriptionWallet: subscriptionWalletPDA,
+        mainTokenAccount: mainTokenAccount,
+        user: userPublicKey,
+        mint: this.usdcMint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        rent: SYSVAR_RENT_PUBKEY,
+      })
+      .instruction();
 
-    const keys = [
-      { pubkey: subscriptionWalletPDA, isSigner: false, isWritable: true },
-      { pubkey: mainTokenAccount, isSigner: false, isWritable: true },
-      { pubkey: userPublicKey, isSigner: true, isWritable: true },
-      { pubkey: this.usdcMint, isSigner: false, isWritable: false },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
-    ];
-
-    transaction.add({
-      keys,
-      programId: this.programId,
-      data: instructionData,
-    });
+    transaction.add(ix);
 
     return transaction;
   }
@@ -234,25 +270,19 @@ export class SubscriptionProtocolService {
     const amountInSmallestUnit = Math.floor(amount * 1_000_000);
     const amountBN = new BN(amountInSmallestUnit);
 
-    const instructionData = Buffer.concat([
-      Buffer.from([103, 7, 8, 74, 10, 156, 142, 175]), // discriminator
-      amountBN.toArrayLike(Buffer, 'le', 8),
-    ]);
+    const ix = await this.program.methods
+      .depositToWallet(amountBN)
+      .accounts({
+        subscriptionWallet: subscriptionWalletPDA,
+        user: userPublicKey,
+        userTokenAccount: userTokenAccount,
+        walletTokenAccount: walletTokenAccount,
+        yieldVaultAccount: PublicKey.default,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .instruction();
 
-    const keys = [
-      { pubkey: subscriptionWalletPDA, isSigner: false, isWritable: false },
-      { pubkey: userPublicKey, isSigner: true, isWritable: true },
-      { pubkey: userTokenAccount, isSigner: false, isWritable: true },
-      { pubkey: walletTokenAccount, isSigner: false, isWritable: true },
-      { pubkey: PublicKey.default, isSigner: false, isWritable: false },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-    ];
-
-    transaction.add({
-      keys,
-      programId: this.programId,
-      data: instructionData,
-    });
+    transaction.add(ix);
 
     return transaction;
   }
@@ -290,25 +320,19 @@ export class SubscriptionProtocolService {
     const amountInSmallestUnit = Math.floor(amount * 1_000_000);
     const amountBN = new BN(amountInSmallestUnit);
 
-    const instructionData = Buffer.concat([
-      Buffer.from([197,40,222,231,38,226,168,174]), // withdraw_from_wallet discriminator
-      amountBN.toArrayLike(Buffer, 'le', 8),
-    ]);
+    const ix = await this.program.methods
+      .withdrawFromWallet(amountBN)
+      .accounts({
+        subscriptionWallet: subscriptionWalletPDA,
+        owner: userPublicKey,
+        userTokenAccount: userTokenAccount,
+        walletTokenAccount: walletTokenAccount,
+        yieldVaultAccount: PublicKey.default,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .instruction();
 
-    const keys = [
-      { pubkey: subscriptionWalletPDA, isSigner: false, isWritable: false },
-      { pubkey: userPublicKey, isSigner: true, isWritable: true },
-      { pubkey: userTokenAccount, isSigner: false, isWritable: true },
-      { pubkey: walletTokenAccount, isSigner: false, isWritable: true },
-      { pubkey: PublicKey.default, isSigner: false, isWritable: false }, // yield_vault_account
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-    ];
-
-    transaction.add({
-      keys,
-      programId: this.programId,
-      data: instructionData,
-    });
+    transaction.add(ix);
 
     return transaction;
   }
@@ -347,6 +371,10 @@ export class SubscriptionProtocolService {
       this.usdcMint
     );
 
+    const [sessionTokenTrackerPDA] = await this.findSessionTokenTrackerPDA(
+      sessionToken
+    );
+
     const walletTokenAccount = await getAssociatedTokenAddress(
       this.usdcMint,
       subscriptionWalletPDA,
@@ -359,32 +387,21 @@ export class SubscriptionProtocolService {
     transaction.recentBlockhash = blockhash;
     transaction.feePayer = userPublicKey;
 
-    // Serialize session token: [length: u32][bytes: utf8]
-    const sessionTokenBytes = Buffer.from(sessionToken, 'utf8');
-    const sessionTokenLength = Buffer.alloc(4);
-    sessionTokenLength.writeUInt32LE(sessionTokenBytes.length, 0);
-    
-    const instructionData = Buffer.concat([
-      Buffer.from([8, 120, 11, 42, 170, 6, 72, 80]), // discriminator
-      sessionTokenLength,
-      sessionTokenBytes
-    ]);
+    const ix = await this.program.methods
+      .subscribeWithWallet(sessionToken)
+      .accounts({
+        subscriptionState: subscriptionStatePDA,
+        sessionTokenTracker: sessionTokenTrackerPDA,
+        subscriptionWallet: subscriptionWalletPDA,
+        merchantPlan: merchantPlanPDA,
+        user: userPublicKey,
+        walletTokenAccount: walletTokenAccount,
+        walletYieldVault: PublicKey.default,
+        systemProgram: SystemProgram.programId,
+      })
+      .instruction();
 
-    const keys = [
-      { pubkey: subscriptionStatePDA, isSigner: false, isWritable: true },
-      { pubkey: subscriptionWalletPDA, isSigner: false, isWritable: true },
-      { pubkey: merchantPlanPDA, isSigner: false, isWritable: true },
-      { pubkey: userPublicKey, isSigner: true, isWritable: true },
-      { pubkey: walletTokenAccount, isSigner: false, isWritable: false },
-      { pubkey: PublicKey.default, isSigner: false, isWritable: false },
-      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-    ];
-
-    transaction.add({
-      keys,
-      programId: this.programId,
-      data: instructionData,
-    });
+    transaction.add(ix);
 
     return transaction;
   }
@@ -407,6 +424,8 @@ export class SubscriptionProtocolService {
       this.usdcMint
     );
 
+    const [protocolConfigPDA] = await this.findProtocolConfigPDA();
+
     // Get subscription data to find merchant plan
     const subscriptionData = await this.getSubscriptionState(subscriptionStatePDA);
     if (!subscriptionData) {
@@ -424,6 +443,17 @@ export class SubscriptionProtocolService {
       merchantPublicKey
     );
 
+    // Get protocol config to find treasury
+    const protocolConfig = await this.getProtocolConfig();
+    if (!protocolConfig) {
+      throw new Error('Protocol config not found');
+    }
+
+    const protocolTreasury = await getAssociatedTokenAddress(
+      this.usdcMint,
+      protocolConfig.treasury
+    );
+
     const transaction = new Transaction();
     const { blockhash, lastValidBlockHeight } = await this.connection.getLatestBlockhash('finalized');
     
@@ -431,24 +461,21 @@ export class SubscriptionProtocolService {
     transaction.lastValidBlockHeight = lastValidBlockHeight;
     transaction.feePayer = userPublicKey;
 
-    const instructionData = Buffer.from([
-      65,124,135,175,165,95,251,172 // execute_payment_from_wallet discriminator
-    ]);
+    const ix = await this.program.methods
+      .executePaymentFromWallet()
+      .accounts({
+        subscriptionState: subscriptionStatePDA,
+        subscriptionWallet: subscriptionWalletPDA,
+        merchantPlan: subscriptionData.merchantPlan,
+        protocolConfig: protocolConfigPDA,
+        walletTokenAccount: walletTokenAccount,
+        merchantTokenAccount: merchantTokenAccount,
+        protocolTreasury: protocolTreasury,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      .instruction();
 
-    const keys = [
-      { pubkey: subscriptionStatePDA, isSigner: false, isWritable: true },
-      { pubkey: subscriptionWalletPDA, isSigner: false, isWritable: true },
-      { pubkey: subscriptionData.merchantPlan, isSigner: false, isWritable: false },
-      { pubkey: walletTokenAccount, isSigner: false, isWritable: true },
-      { pubkey: merchantTokenAccount, isSigner: false, isWritable: true },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-    ];
-
-    transaction.add({
-      keys,
-      programId: this.programId,
-      data: instructionData,
-    });
+    transaction.add(ix);
 
     return transaction;
   }
@@ -483,22 +510,17 @@ export class SubscriptionProtocolService {
     transaction.lastValidBlockHeight = lastValidBlockHeight;
     transaction.feePayer = userPublicKey;
 
-    const instructionData = Buffer.from([
-      87,116,152,140,138,150,126,195 // cancel_subscription_wallet discriminator
-    ]);
+    const ix = await this.program.methods
+      .cancelSubscriptionWallet()
+      .accounts({
+        subscriptionState: subscriptionStatePDA,
+        subscriptionWallet: subscriptionWalletPDA,
+        merchantPlan: subscriptionData.merchantPlan,
+        user: userPublicKey,
+      })
+      .instruction();
 
-    const keys = [
-      { pubkey: subscriptionStatePDA, isSigner: false, isWritable: true },
-      { pubkey: subscriptionWalletPDA, isSigner: false, isWritable: true },
-      { pubkey: subscriptionData.merchantPlan, isSigner: false, isWritable: true },
-      { pubkey: userPublicKey, isSigner: true, isWritable: true },
-    ];
-
-    transaction.add({
-      keys,
-      programId: this.programId,
-      data: instructionData,
-    });
+    transaction.add(ix);
 
     return transaction;
   }
@@ -514,12 +536,19 @@ export class SubscriptionProtocolService {
     walletPDA: PublicKey
   ): Promise<SubscriptionWalletData | null> {
     try {
-      const accountInfo = await this.connection.getAccountInfo(walletPDA);
-      if (!accountInfo) return null;
-
-      // Parse account data (you'd use Anchor's IDL decoder in production)
-      // This is a simplified version
-      return this.parseSubscriptionWalletData(accountInfo.data);
+      const accountData = await this.program.account.subscriptionWallet.fetch(walletPDA);
+      
+      return {
+        owner: accountData.owner,
+        mainTokenAccount: accountData.mainTokenAccount,
+        mint: accountData.mint,
+        yieldVault: accountData.yieldVault,
+        yieldStrategy: accountData.yieldStrategy,
+        isYieldEnabled: accountData.isYieldEnabled,
+        totalSubscriptions: accountData.totalSubscriptions,
+        totalSpent: accountData.totalSpent,
+        bump: accountData.bump,
+      };
     } catch (error) {
       console.error('Error fetching subscription wallet:', error);
       return null;
@@ -549,10 +578,23 @@ export class SubscriptionProtocolService {
     statePDA: PublicKey
   ): Promise<SubscriptionStateData | null> {
     try {
-      const accountInfo = await this.connection.getAccountInfo(statePDA);
-      if (!accountInfo) return null;
-
-      return this.parseSubscriptionStateData(accountInfo.data);
+      const accountData = await this.program.account.subscriptionState.fetch(statePDA);
+      
+      return {
+        user: accountData.user,
+        subscriptionWallet: accountData.subscriptionWallet,
+        merchant: accountData.merchant,
+        mint: accountData.mint,
+        merchantPlan: accountData.merchantPlan,
+        feeAmount: accountData.feeAmount,
+        paymentInterval: accountData.paymentInterval,
+        lastPaymentTimestamp: accountData.lastPaymentTimestamp,
+        totalPaid: accountData.totalPaid,
+        paymentCount: accountData.paymentCount,
+        isActive: accountData.isActive,
+        sessionToken: accountData.sessionToken,
+        bump: accountData.bump,
+      };
     } catch (error) {
       console.error('Error fetching subscription state:', error);
       return null;
@@ -566,12 +608,46 @@ export class SubscriptionProtocolService {
     planPDA: PublicKey
   ): Promise<MerchantPlanData | null> {
     try {
-      const accountInfo = await this.connection.getAccountInfo(planPDA);
-      if (!accountInfo) return null;
-
-      return this.parseMerchantPlanData(accountInfo.data);
+      const accountData = await this.program.account.merchantPlan.fetch(planPDA);
+      
+      return {
+        merchant: accountData.merchant,
+        mint: accountData.mint,
+        planId: accountData.planId,
+        planName: accountData.planName,
+        feeAmount: accountData.feeAmount,
+        paymentInterval: accountData.paymentInterval,
+        isActive: accountData.isActive,
+        totalSubscribers: accountData.totalSubscribers,
+        bump: accountData.bump,
+      };
     } catch (error) {
       console.error('Error fetching merchant plan:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get Protocol Config data
+   */
+  async getProtocolConfig(): Promise<{
+    authority: PublicKey;
+    treasury: PublicKey;
+    protocolFeeBps: number;
+    bump: number;
+  } | null> {
+    try {
+      const [protocolConfigPDA] = await this.findProtocolConfigPDA();
+      const accountData = await this.program.account.protocolConfig.fetch(protocolConfigPDA);
+      
+      return {
+        authority: accountData.authority,
+        treasury: accountData.treasury,
+        protocolFeeBps: accountData.protocolFeeBps,
+        bump: accountData.bump,
+      };
+    } catch (error) {
+      console.error('Error fetching protocol config:', error);
       return null;
     }
   }
@@ -606,46 +682,67 @@ export class SubscriptionProtocolService {
     userPublicKey: PublicKey
   ): Promise<SubscriptionStateData[]> {
     try {
-      // This would typically use getProgramAccounts with filters
-      // For now, return empty array - implement based on your needs
-      const accounts = await this.connection.getProgramAccounts(this.programId, {
-        filters: [
-          {
-            memcmp: {
-              offset: 8, // After discriminator
-              bytes: userPublicKey.toBase58(),
-            },
+      const accounts = await this.program.account.subscriptionState.all([
+        {
+          memcmp: {
+            offset: 8, // After discriminator
+            bytes: userPublicKey.toBase58(),
           },
-        ],
-      });
+        },
+      ]);
 
-      return accounts
-        .map((account) => this.parseSubscriptionStateData(account.account.data))
-        .filter((data): data is SubscriptionStateData => data !== null);
+      return accounts.map((account) => ({
+        user: account.account.user,
+        subscriptionWallet: account.account.subscriptionWallet,
+        merchant: account.account.merchant,
+        mint: account.account.mint,
+        merchantPlan: account.account.merchantPlan,
+        feeAmount: account.account.feeAmount,
+        paymentInterval: account.account.paymentInterval,
+        lastPaymentTimestamp: account.account.lastPaymentTimestamp,
+        totalPaid: account.account.totalPaid,
+        paymentCount: account.account.paymentCount,
+        isActive: account.account.isActive,
+        sessionToken: account.account.sessionToken,
+        bump: account.account.bump,
+      }));
     } catch (error) {
       console.error('Error fetching user subscriptions:', error);
       return [];
     }
   }
 
-  // ============================================
-  // HELPER PARSERS (Simplified - use Anchor IDL in production)
-  // ============================================
+  /**
+   * Get all merchant plans for a merchant
+   */
+  async getMerchantPlans(
+    merchantPublicKey: PublicKey
+  ): Promise<MerchantPlanData[]> {
+    try {
+      const accounts = await this.program.account.merchantPlan.all([
+        {
+          memcmp: {
+            offset: 8, // After discriminator
+            bytes: merchantPublicKey.toBase58(),
+          },
+        },
+      ]);
 
-  private parseSubscriptionWalletData(data: Buffer): SubscriptionWalletData | null {
-    // Implement proper deserialization based on your account structure
-    // This is a placeholder
-    return null;
-  }
-
-  private parseSubscriptionStateData(data: Buffer): SubscriptionStateData | null {
-    // Implement proper deserialization
-    return null;
-  }
-
-  private parseMerchantPlanData(data: Buffer): MerchantPlanData | null {
-    // Implement proper deserialization
-    return null;
+      return accounts.map((account) => ({
+        merchant: account.account.merchant,
+        mint: account.account.mint,
+        planId: account.account.planId,
+        planName: account.account.planName,
+        feeAmount: account.account.feeAmount,
+        paymentInterval: account.account.paymentInterval,
+        isActive: account.account.isActive,
+        totalSubscribers: account.account.totalSubscribers,
+        bump: account.account.bump,
+      }));
+    } catch (error) {
+      console.error('Error fetching merchant plans:', error);
+      return [];
+    }
   }
 
   /**
