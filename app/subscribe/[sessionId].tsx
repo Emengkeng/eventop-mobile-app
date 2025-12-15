@@ -235,12 +235,7 @@ export default function SubscribeFromWebScreen() {
           `https://api.eventop.xyz/checkout/${sessionId}/complete`,
           {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              subscriptionPda: subscriptionPDAString,
-              userWallet: publicKey,
-              signature: signature,
-            })
+            headers: { 'Content-Type': 'application/json' }
           }
         );
 
