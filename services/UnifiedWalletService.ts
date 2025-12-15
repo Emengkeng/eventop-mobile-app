@@ -219,4 +219,39 @@ export class UnifiedWalletService {
 
     return signature;
   }
+
+  /**
+   * Cancel a subscription
+   */
+  static async cancelSubscription(
+    privyWallet: any,
+    merchantPublicKey: PublicKey
+  ): Promise<string> {
+    if (!privyWallet?.publicKey) {
+      throw new Error('Privy wallet not initialized');
+    }
+
+    const provider = await privyWallet.getProvider();
+    const userPubkey = new PublicKey(privyWallet.publicKey);
+    
+    // Build the cancel transaction
+    const transaction = await subscriptionService.cancelSubscription(
+      userPubkey,
+      merchantPublicKey
+    );
+
+    // Sign and send using Privy's provider
+    const { signature } = await provider.request({
+      method: "signAndSendTransaction",
+      params: {
+        transaction,
+        connection: subscriptionService.connection,
+      },
+    });
+
+    // Wait for confirmation
+    await subscriptionService.connection.confirmTransaction(signature, 'confirmed');
+
+    return signature;
+  }
 }

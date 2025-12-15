@@ -1,170 +1,275 @@
-import { UnifiedWalletService } from "@/services/UnifiedWalletService";
-import { useEmbeddedSolanaWallet } from "@privy-io/expo";
-import { PublicKey } from "@solana/web3.js";
-import React from "react";
-import { subscriptionService } from "@/services/SubscriptionProtocolService";
+import { useState, useEffect, useCallback } from 'react';
+import { useEmbeddedSolanaWallet } from '@privy-io/expo';
+import { PublicKey } from '@solana/web3.js';
+import { UnifiedWalletService } from '@/services/UnifiedWalletService';
+import { subscriptionService } from '@/services/SubscriptionProtocolService';
+
+export interface UnifiedBalance {
+  total: number;
+  available: number;
+  committed: number;
+}
 
 export function useUnifiedWallet() {
   const { wallets, create: createSolanaWallet } = useEmbeddedSolanaWallet();
   const privyWallet = wallets?.[0];
-
-  const [balance, setBalance] = React.useState({
+  
+  const [balance, setBalance] = useState<UnifiedBalance>({
     total: 0,
     available: 0,
-    committed: 0
+    committed: 0,
   });
-  const [loading, setLoading] = React.useState(false);
-  const [walletCreating, setWalletCreating] = React.useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const ensureWalletExists = async () => {
-    if (privyWallet?.publicKey) {
-      return privyWallet;
+  const publicKey = privyWallet?.publicKey || null;
+  const isConnected = !!publicKey;
+
+  // Load balance
+  const loadBalance = useCallback(async () => {
+    if (!privyWallet || !isConnected) {
+      setBalance({ total: 0, available: 0, committed: 0 });
+      return;
     }
 
-    if (walletCreating) {
-      return null;
-    }
-
-    setWalletCreating(true);
     try {
-      const newWallet = await createSolanaWallet?.({
-        createAdditional: false,
-        recoveryMethod: "privy",
-      });
-      return newWallet;
-    } catch (error) {
-      console.error('Error creating wallet:', error);
-      throw error;
-    } finally {
-      setWalletCreating(false);
+      const balanceData = await UnifiedWalletService.getUnifiedBalance(privyWallet);
+      setBalance(balanceData);
+    } catch (err: any) {
+      console.error('Failed to load balance:', err);
+      setError(err.message);
     }
-  };
+  }, [privyWallet, isConnected]);
 
-  const refreshBalance = async () => {
-    try {
-      const wallet = await ensureWalletExists();
-      if (!privyWallet?.publicKey) {
-        console.warn('No wallet available to fetch balance');
-        return;
+  // Auto-load balance when wallet connects
+  useEffect(() => {
+    if (isConnected) {
+      loadBalance();
+    }
+  }, [isConnected, loadBalance]);
+
+  /**
+   * Deposit funds to subscription wallet
+   */
+  const deposit = useCallback(
+    async (amount: number): Promise<string> => {
+      if (!privyWallet) {
+        throw new Error('Wallet not connected');
       }
 
       setLoading(true);
-      const bal = await UnifiedWalletService.getUnifiedBalance(wallet);
-      setBalance(bal);
-    } catch (error) {
-      console.error('Error fetching balance:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+      setError(null);
 
-  const deposit = async (amount: number) => {
-    const wallet = await ensureWalletExists();
-    if (!wallet) throw new Error('Wallet not available');
+      try {
+        const signature = await UnifiedWalletService.deposit(privyWallet, amount);
+        
+        // Reload balance after deposit
+        await loadBalance();
+        
+        return signature;
+      } catch (err: any) {
+        console.error('Deposit failed:', err);
+        setError(err.message);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [privyWallet, loadBalance]
+  );
 
-    setLoading(true);
-    try {
-      const signature = await UnifiedWalletService.deposit(wallet, amount);
-      await refreshBalance();
-      return signature;
-    } finally {
-      setLoading(false);
-    }
-  };
+  /**
+   * Withdraw funds from subscription wallet
+   */
+  const withdraw = useCallback(
+    async (amount: number): Promise<string> => {
+      if (!privyWallet) {
+        throw new Error('Wallet not connected');
+      }
 
-  const withdraw = async (amount: number) => {
-    const wallet = await ensureWalletExists();
-    if (!wallet) throw new Error('Wallet not available');
+      // Check if user has enough available balance
+      if (amount > balance.available) {
+        throw new Error(
+          `Insufficient available balance. You have $${balance.available.toFixed(2)} available, but $${balance.committed.toFixed(2)} is committed to active subscriptions.`
+        );
+      }
 
-    setLoading(true);
-    try {
-      const signature = await UnifiedWalletService.withdraw(wallet, amount);
-      await refreshBalance();
-      return signature;
-    } finally {
-      setLoading(false);
-    }
-  };
+      setLoading(true);
+      setError(null);
 
-  const subscribe = async (merchantPubkey: PublicKey, planId: string, sessionId: string) => {
-    const wallet = await ensureWalletExists();
-    if (!privyWallet?.publicKey) throw new Error('Wallet not available');
+      try {
+        const signature = await UnifiedWalletService.withdraw(privyWallet, amount);
+        
+        // Reload balance after withdrawal
+        await loadBalance();
+        
+        return signature;
+      } catch (err: any) {
+        console.error('Withdraw failed:', err);
+        setError(err.message);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [privyWallet, balance, loadBalance]
+  );
 
-    setLoading(true);
-    try {
-      const userPubkey = new PublicKey(privyWallet?.publicKey);
-      const [subscriptionPDA] = await subscriptionService.findSubscriptionStatePDA(
-        userPubkey,
-        merchantPubkey,
-        subscriptionService.usdcMint
-      );
+  /**
+   * Subscribe to a merchant plan
+   */
+  const subscribe = useCallback(
+    async (
+      merchantPublicKey: PublicKey,
+      planId: string,
+      sessionToken: string
+    ): Promise<string> => {
+      if (!privyWallet) {
+        throw new Error('Wallet not connected');
+      }
 
-      console.log('🔍 Checking if subscription exists:', subscriptionPDA.toString());
+      setLoading(true);
+      setError(null);
 
-      // Try to fetch existing subscription
-      const existingSubscription = await subscriptionService.getSubscriptionState(subscriptionPDA);
+      try {
+        // Check for existing subscription
+        const userPubkey = new PublicKey(privyWallet.publicKey);
+        const [subscriptionPDA] = await subscriptionService.findSubscriptionStatePDA(
+          userPubkey,
+          merchantPublicKey,
+          subscriptionService.usdcMint
+        );
 
-      if (existingSubscription) {
-        if (existingSubscription.isActive) {
-          // Subscription already exists and is active - return PDA for navigation
-          const error: any = new Error('SUBSCRIPTION_ALREADY_EXISTS');
-          error.subscriptionPDA = subscriptionPDA.toString();
-          error.existingSubscription = existingSubscription;
-          throw error;
-        } else {
-          // Subscription exists but is cancelled
-          const error: any = new Error('SUBSCRIPTION_WAS_CANCELLED');
-          error.subscriptionPDA = subscriptionPDA.toString();
-          throw error;
+        const existing = await subscriptionService.getSubscriptionState(subscriptionPDA);
+        
+        if (existing && existing.isActive) {
+          throw new Error(
+            'You already have an active subscription to this merchant. Please cancel your existing subscription before subscribing again.'
+          );
         }
+
+        // Execute subscription
+        const signature = await UnifiedWalletService.subscribe(
+          privyWallet,
+          merchantPublicKey,
+          planId,
+          sessionToken
+        );
+        
+        // Reload balance after subscription
+        await loadBalance();
+        
+        return signature;
+      } catch (err: any) {
+        console.error('Subscribe failed:', err);
+        setError(err.message);
+        throw err;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [privyWallet, loadBalance]
+  );
+
+  /**
+   * Cancel a subscription
+   */
+  const cancelSubscription = useCallback(
+    async (merchantPublicKey: PublicKey): Promise<string> => {
+      if (!privyWallet) {
+        throw new Error('Wallet not connected');
       }
 
-      // No existing subscription found, proceed with creation
-      console.log('✅ No existing subscription found, proceeding...');
-      const signature = await UnifiedWalletService.subscribe(
-        wallet,
-        merchantPubkey,
-        planId,
-        sessionId
-      );
-      await refreshBalance();
-      return signature;
-    } catch (error: any) {
-      console.error('❌ Subscribe error:', error);
-      
-      // Re-throw with more context
-      if (error.message === 'SUBSCRIPTION_ALREADY_EXISTS') {
-        const enhancedError: any = new Error('You already have an active subscription to this merchant. You must cancel your existing subscription before subscribing to a different plan.');
-        enhancedError.subscriptionPDA = error.subscriptionPDA;
-        enhancedError.existingSubscription = error.existingSubscription;
-        throw enhancedError;
-      } else if (error.message === 'SUBSCRIPTION_WAS_CANCELLED') {
-        const enhancedError: any = new Error('You previously cancelled a subscription to this merchant. Please contact support to reactivate or create a new subscription.');
-        enhancedError.subscriptionPDA = error.subscriptionPDA;
-        throw enhancedError;
+      setLoading(true);
+      setError(null);
+
+      try {
+        // Verify subscription exists and is active
+        const userPubkey = new PublicKey(privyWallet.publicKey);
+        const [subscriptionPDA] = await subscriptionService.findSubscriptionStatePDA(
+          userPubkey,
+          merchantPublicKey,
+          subscriptionService.usdcMint
+        );
+
+        const subscription = await subscriptionService.getSubscriptionState(subscriptionPDA);
+        
+        if (!subscription) {
+          throw new Error('Subscription not found');
+        }
+
+        if (!subscription.isActive) {
+          throw new Error('This subscription is already cancelled');
+        }
+
+        // Execute cancellation
+        const signature = await UnifiedWalletService.cancelSubscription(
+          privyWallet,
+          merchantPublicKey
+        );
+        
+        console.log('✅ Subscription cancelled:', signature);
+        
+        // Reload balance after cancellation (committed amount should decrease)
+        await loadBalance();
+        
+        return signature;
+      } catch (err: any) {
+        console.error('Cancel subscription failed:', err);
+        setError(err.message);
+        throw err;
+      } finally {
+        setLoading(false);
       }
-      
-      throw error;
+    },
+    [privyWallet, loadBalance]
+  );
+
+  /**
+   * Ensure subscription wallet exists
+   */
+  const ensureWallet = useCallback(async (): Promise<boolean> => {
+    if (!privyWallet) {
+      throw new Error('Wallet not connected');
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const { needsCreation } = await UnifiedWalletService.ensureSubscriptionWallet(
+        privyWallet
+      );
+
+      if (needsCreation) {
+        await UnifiedWalletService.createSubscriptionWallet(privyWallet);
+        console.log('✅ Subscription wallet created');
+      }
+
+      return true;
+    } catch (err: any) {
+      console.error('Ensure wallet failed:', err);
+      setError(err.message);
+      throw err;
     } finally {
       setLoading(false);
     }
-  };
-
-  React.useEffect(() => {
-    if (privyWallet?.publicKey) {
-      refreshBalance();
-    }
-  }, [privyWallet?.publicKey]);
+  }, [privyWallet]);
 
   return {
-    publicKey: privyWallet?.publicKey,
+    // Wallet state
+    publicKey,
+    isConnected,
     balance,
     loading,
-    walletCreating,
+    error,
+
+    // Actions
     deposit,
     withdraw,
     subscribe,
-    refreshBalance,
-    ensureWalletExists
+    cancelSubscription,
+    ensureWallet,
+    refreshBalance: loadBalance,
   };
 }

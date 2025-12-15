@@ -2,7 +2,7 @@ import axios from 'axios';
 import { useWalletStore } from '@/store/walletStore';
 import { APP_CONFIG } from '@/config/app';
 
-const API_URL = APP_CONFIG.APP_URL || 'https://api.eventop.xyz';
+const API_URL = 'https://api.eventop.xyz';
 
 export const api = axios.create({
   baseURL: API_URL,

@@ -1,8 +1,8 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Calendar, DollarSign, Activity, AlertCircle, Pause, X } from 'lucide-react-native';
+import { ArrowLeft, Calendar, DollarSign, Activity, AlertCircle } from 'lucide-react-native';
 import { format } from 'date-fns';
 import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
@@ -10,46 +10,96 @@ import { spacing } from '@/theme/spacing';
 import { radius } from '@/theme/radius';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { apiService } from '@/services/api';
+import { useUnifiedWallet } from '@/hooks/useUnifiedWallet';
+import { PublicKey } from '@solana/web3.js';
+
+interface SubscriptionDetail {
+  subscriptionPda: string;
+  userWallet: string;
+  merchantWallet: string;
+  merchantPlanPda: string;
+  feeAmount: string;
+  paymentInterval: string;
+  lastPaymentTimestamp: string;
+  totalPaid: string;
+  paymentCount: number;
+  isActive: boolean;
+  customerEmail: string | null;
+  customerId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  cancelledAt: string | null;
+  transactions?: Array<{
+    id: string;
+    signature: string;
+    type: string;
+    amount: string;
+    blockTime: string;
+    status: string;
+  }>;
+}
+
+interface MerchantPlan {
+  planPda: string;
+  merchantWallet: string;
+  planName: string;
+  description?: string;
+}
 
 export default function SubscriptionDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
+  const { cancelSubscription, loading: walletLoading } = useUnifiedWallet();
 
-  // Mock data - replace with actual API call
-  const subscription = {
-    subscriptionPda: id,
-    merchantWallet: '8xK2...9pQ3',
-    merchantName: 'Premium Service',
-    planName: 'Pro Plan',
-    feeAmount: 9990000, // 9.99 USDC (in micro-lamports)
-    paymentInterval: 2592000, // 30 days
-    lastPaymentTimestamp: Date.now() / 1000 - 604800, // 7 days ago
-    nextPaymentDate: new Date(Date.now() + 23 * 24 * 60 * 60 * 1000),
-    totalPaid: 29970000,
-    paymentCount: 3,
-    isActive: true,
-    createdAt: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+  const [subscription, setSubscription] = useState<SubscriptionDetail | null>(null);
+  const [merchantPlan, setMerchantPlan] = useState<MerchantPlan | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [cancelling, setCancelling] = useState(false);
+
+  useEffect(() => {
+    loadSubscriptionDetail();
+  }, [id]);
+
+  const loadSubscriptionDetail = async () => {
+    if (!id || typeof id !== 'string') {
+      Alert.alert('Error', 'Invalid subscription ID');
+      router.back();
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      // Fetch subscription detail
+      const subData = await apiService.getSubscriptionDetail(id);
+      console.log("subscription data", subData)
+      setSubscription(subData);
+
+      // Fetch merchant plan details
+      if (subData.merchantPlanPda) {
+        try {
+          const planData = await apiService.getPlanDetail(subData.merchantPlanPda);
+          setMerchantPlan(planData);
+        } catch (error) {
+          console.log('Could not fetch plan details:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load subscription:', error);
+      Alert.alert(
+        'Error',
+        'Failed to load subscription details. Please try again.',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handlePause = () => {
-    Alert.alert(
-      'Pause Subscription',
-      'Are you sure you want to pause this subscription? You won\'t be charged until you resume it.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Pause',
-          style: 'destructive',
-          onPress: () => {
-            // Implement pause logic
-            Alert.alert('Success', 'Subscription paused');
-          },
-        },
-      ]
-    );
-  };
+  const handleCancel = async () => {
+    if (!subscription) return;
 
-  const handleCancel = () => {
     Alert.alert(
       'Cancel Subscription',
       'Are you sure you want to cancel this subscription? This action cannot be undone.',
@@ -58,25 +108,83 @@ export default function SubscriptionDetailScreen() {
         {
           text: 'Cancel Subscription',
           style: 'destructive',
-          onPress: () => {
-            // Implement cancel logic
-            router.back();
-          },
+          onPress: executeCancel,
         },
       ]
     );
   };
 
+  const executeCancel = async () => {
+    if (!subscription) return;
+
+    setCancelling(true);
+    try {
+      const merchantPubkey = new PublicKey(subscription.merchantWallet);
+      await cancelSubscription(merchantPubkey);
+
+      Alert.alert(
+        'Success',
+        'Subscription cancelled successfully',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
+    } catch (error: any) {
+      console.error('Failed to cancel subscription:', error);
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to cancel subscription. Please try again.'
+      );
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading subscription...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!subscription) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.centerContent}>
+          <Card>
+            <Text style={styles.emptyTitle}>Subscription Not Found</Text>
+            <Text style={styles.emptyDescription}>
+              This subscription doesn't exist or you don't have access to it.
+            </Text>
+            <Button onPress={() => router.back()}>Go Back</Button>
+          </Card>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const monthlyFee = parseFloat(subscription.feeAmount) / 1_000_000;
+  const totalPaid = parseFloat(subscription.totalPaid) / 1_000_000;
+  const lastPaymentDate = new Date(parseInt(subscription.lastPaymentTimestamp) * 1000);
+  const paymentIntervalSeconds = parseInt(subscription.paymentInterval);
+  const nextPaymentDate = new Date(lastPaymentDate.getTime() + paymentIntervalSeconds * 1000);
+  const createdDate = new Date(subscription.createdAt);
+  
   const daysUntilPayment = Math.ceil(
-    (subscription.nextPaymentDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+    (nextPaymentDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
   );
+
+  const merchantName = merchantPlan?.planName || 'Subscription Service';
+  const planName = merchantPlan?.planName || 'Subscription Plan';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} />
+          <ArrowLeft size={24} color={colors.foreground} />
         </TouchableOpacity>
         <Text style={styles.title}>Subscription Details</Text>
         <View style={{ width: 40 }} />
@@ -87,44 +195,57 @@ export default function SubscriptionDetailScreen() {
         <Card style={styles.merchantCard}>
           <View style={styles.merchantIcon}>
             <Text style={styles.merchantIconText}>
-              {subscription.merchantName.slice(0, 2).toUpperCase()}
+              {merchantName.slice(0, 2).toUpperCase()}
             </Text>
           </View>
-          <Text style={styles.merchantName}>{subscription.merchantName}</Text>
-          <Text style={styles.planName}>{subscription.planName}</Text>
+          <Text style={styles.merchantName}>{merchantName}</Text>
+          <Text style={styles.planName}>{planName}</Text>
           
-          <View style={styles.statusBadge}>
-            <View style={styles.activeDot} />
-            <Text style={styles.statusText}>Active</Text>
+          <View style={[
+            styles.statusBadge,
+            !subscription.isActive && styles.inactiveBadge
+          ]}>
+            <View style={[
+              styles.activeDot,
+              !subscription.isActive && styles.inactiveDot
+            ]} />
+            <Text style={[
+              styles.statusText,
+              !subscription.isActive && styles.inactiveText
+            ]}>
+              {subscription.isActive ? 'Active' : 'Cancelled'}
+            </Text>
           </View>
         </Card>
 
         {/* Next Payment Card */}
-        <Card>
-          <View style={styles.cardHeader}>
-            <Calendar size={20} />
-            <Text style={styles.cardTitle}>Next Payment</Text>
-          </View>
+        {subscription.isActive && (
+          <Card>
+            <View style={styles.cardHeader}>
+              <Calendar size={20} color={colors.foreground} />
+              <Text style={styles.cardTitle}>Next Payment</Text>
+            </View>
 
-          <View style={styles.paymentInfo}>
-            <View>
-              <Text style={styles.paymentDate}>
-                {format(subscription.nextPaymentDate, 'MMMM d, yyyy')}
-              </Text>
-              <Text style={styles.paymentTime}>
-                in {daysUntilPayment} day{daysUntilPayment !== 1 ? 's' : ''}
+            <View style={styles.paymentInfo}>
+              <View>
+                <Text style={styles.paymentDate}>
+                  {format(nextPaymentDate, 'MMMM d, yyyy')}
+                </Text>
+                <Text style={styles.paymentTime}>
+                  in {daysUntilPayment} day{daysUntilPayment !== 1 ? 's' : ''}
+                </Text>
+              </View>
+              <Text style={styles.paymentAmount}>
+                ${monthlyFee.toFixed(2)}
               </Text>
             </View>
-            <Text style={styles.paymentAmount}>
-              ${(subscription.feeAmount / 1_000_000).toFixed(2)}
-            </Text>
-          </View>
-        </Card>
+          </Card>
+        )}
 
         {/* Payment History */}
         <Card>
           <View style={styles.cardHeader}>
-            <Activity size={20} />
+            <Activity size={20} color={colors.foreground} />
             <Text style={styles.cardTitle}>Payment History</Text>
           </View>
 
@@ -132,7 +253,7 @@ export default function SubscriptionDetailScreen() {
             <View style={styles.historyStat}>
               <Text style={styles.historyStatLabel}>Total Paid</Text>
               <Text style={styles.historyStatValue}>
-                ${(subscription.totalPaid / 1_000_000).toFixed(2)}
+                ${totalPaid.toFixed(2)}
               </Text>
             </View>
             <View style={styles.historyDivider} />
@@ -144,84 +265,115 @@ export default function SubscriptionDetailScreen() {
             <View style={styles.historyStat}>
               <Text style={styles.historyStatLabel}>Since</Text>
               <Text style={styles.historyStatValue}>
-                {format(subscription.createdAt, 'MMM yyyy')}
+                {format(createdDate, 'MMM yyyy')}
               </Text>
             </View>
           </View>
 
-          {/* Timeline */}
-          <View style={styles.timeline}>
-            {[...Array(Math.min(subscription.paymentCount, 5))].map((_, index) => {
-              const paymentDate = new Date(
-                subscription.createdAt.getTime() + index * 30 * 24 * 60 * 60 * 1000
-              );
-              return (
-                <View key={index} style={styles.timelineItem}>
+          {/* Recent Transactions */}
+          {subscription.transactions && subscription.transactions.length > 0 && (
+            <View style={styles.timeline}>
+              {subscription.transactions.slice(0, 5).map((tx) => (
+                <View key={tx.id} style={styles.timelineItem}>
                   <View style={styles.timelineDot} />
                   <View style={styles.timelineContent}>
                     <Text style={styles.timelineDate}>
-                      {format(paymentDate, 'MMM d, yyyy')}
+                      {format(new Date(parseInt(tx.blockTime) * 1000), 'MMM d, yyyy')}
                     </Text>
                     <Text style={styles.timelineAmount}>
-                      ${(subscription.feeAmount / 1_000_000).toFixed(2)}
+                      ${(parseFloat(tx.amount) / 1_000_000).toFixed(2)}
                     </Text>
                   </View>
-                  <Text style={styles.timelineStatus}>Success</Text>
+                  <Text style={styles.timelineStatus}>
+                    {tx.status === 'success' ? 'Success' : 'Failed'}
+                  </Text>
                 </View>
-              );
-            })}
-          </View>
+              ))}
+            </View>
+          )}
         </Card>
 
         {/* Subscription Info */}
         <Card>
           <View style={styles.cardHeader}>
-            <DollarSign size={20} />
+            <DollarSign size={20} color={colors.foreground} />
             <Text style={styles.cardTitle}>Subscription Info</Text>
           </View>
 
           <View style={styles.infoRows}>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Subscription ID</Text>
-              <Text style={styles.infoValue}>{subscription.subscriptionPda}</Text>
+              <Text style={styles.infoValue} numberOfLines={1}>
+                {subscription.subscriptionPda.slice(0, 8)}...{subscription.subscriptionPda.slice(-8)}
+              </Text>
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Merchant</Text>
-              <Text style={styles.infoValue}>{subscription.merchantWallet}</Text>
+              <Text style={styles.infoValue} numberOfLines={1}>
+                {subscription.merchantWallet.slice(0, 8)}...{subscription.merchantWallet.slice(-8)}
+              </Text>
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Billing Cycle</Text>
-              <Text style={styles.infoValue}>Monthly</Text>
+              <Text style={styles.infoValue}>
+                Every {paymentIntervalSeconds / 86400} days
+              </Text>
             </View>
             <View style={styles.infoRow}>
               <Text style={styles.infoLabel}>Started</Text>
               <Text style={styles.infoValue}>
-                {format(subscription.createdAt, 'MMM d, yyyy')}
+                {format(createdDate, 'MMM d, yyyy')}
               </Text>
             </View>
+            {subscription.customerEmail && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Email</Text>
+                <Text style={styles.infoValue}>{subscription.customerEmail}</Text>
+              </View>
+            )}
           </View>
         </Card>
 
         {/* Warning Box */}
-        <View style={styles.warningBox}>
-          <AlertCircle size={20} />
-          <View style={styles.warningContent}>
-            <Text style={styles.warningTitle}>Automatic Renewal</Text>
-            <Text style={styles.warningText}>
-              Your subscription will automatically renew every month. Funds are deducted from your Subscription Wallet.
-            </Text>
+        {subscription.isActive && (
+          <View style={styles.warningBox}>
+            <AlertCircle size={20} color={colors.warning} />
+            <View style={styles.warningContent}>
+              <Text style={styles.warningTitle}>Automatic Renewal</Text>
+              <Text style={styles.warningText}>
+                Your subscription will automatically renew every {paymentIntervalSeconds / 86400} days. 
+                Funds are deducted from your Subscription Wallet.
+              </Text>
+            </View>
           </View>
-        </View>
+        )}
+
+        {/* Cancelled Info */}
+        {!subscription.isActive && subscription.cancelledAt && (
+          <View style={styles.infoBox}>
+            <AlertCircle size={20} color={colors.mutedForeground} />
+            <View style={styles.infoContent}>
+              <Text style={styles.infoTitle}>Subscription Cancelled</Text>
+              <Text style={styles.infoText}>
+                This subscription was cancelled on {format(new Date(subscription.cancelledAt), 'MMM d, yyyy')}
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* Actions */}
-        <View style={styles.actions}>
-          <Button variant="outline" onPress={handlePause} style={styles.actionButton}>
-            Pause Subscription
-          </Button>
-          <Button variant="destructive" onPress={handleCancel}>
-            Cancel Subscription
-          </Button>
-        </View>
+        {subscription.isActive && (
+          <View style={styles.actions}>
+            <Button 
+              variant="destructive" 
+              onPress={handleCancel}
+              loading={cancelling || walletLoading}
+              disabled={cancelling || walletLoading}
+            >
+              {cancelling ? 'Cancelling...' : 'Cancel Subscription'}
+            </Button>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -254,6 +406,29 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.lg,
     gap: spacing.lg,
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  loadingText: {
+    ...typography.body,
+    color: colors.mutedForeground,
+    marginTop: spacing.md,
+  },
+  emptyTitle: {
+    ...typography.h3,
+    color: colors.foreground,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  emptyDescription: {
+    ...typography.body,
+    color: colors.mutedForeground,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
   },
   merchantCard: {
     alignItems: 'center',
@@ -294,15 +469,24 @@ const styles = StyleSheet.create({
     top: spacing.lg,
     right: spacing.lg,
   },
+  inactiveBadge: {
+    backgroundColor: 'rgba(107, 114, 128, 0.1)',
+  },
   activeDot: {
     width: 6,
     height: 6,
     borderRadius: radius.full,
     backgroundColor: colors.success,
   },
+  inactiveDot: {
+    backgroundColor: colors.mutedForeground,
+  },
   statusText: {
     ...typography.caption,
     color: colors.success,
+  },
+  inactiveText: {
+    color: colors.mutedForeground,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -418,10 +602,29 @@ const styles = StyleSheet.create({
     ...typography.small,
     color: colors.mutedForeground,
   },
+  infoBox: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    padding: spacing.lg,
+    backgroundColor: 'rgba(107, 114, 128, 0.1)',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(107, 114, 128, 0.2)',
+    alignItems: 'flex-start',
+  },
+  infoContent: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  infoTitle: {
+    ...typography.bodyMedium,
+    color: colors.mutedForeground,
+  },
+  infoText: {
+    ...typography.small,
+    color: colors.mutedForeground,
+  },
   actions: {
     gap: spacing.md,
-  },
-  actionButton: {
-    marginBottom: 0,
   },
 });

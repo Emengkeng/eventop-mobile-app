@@ -68,6 +68,7 @@ export default function SubscribeFromWebScreen() {
   const monthlyFee = session ? parseFloat(session.plan.feeAmount) / 1_000_000 : 0;
   const requiredBalance = monthlyFee * 3;
   const hasEnoughBalance = balance.available >= requiredBalance;
+  const useSubscriptionPDAinError = null
 
   useEffect(() => {
     if (sessionId && publicKey && isConnected) {
@@ -281,6 +282,16 @@ export default function SubscribeFromWebScreen() {
         errorTitle = '⚠️ Already Subscribed';
         errorMessage = error.message;
         showRetry = false;
+
+        const merchantWalletAddress = session.merchant.walletAddress;
+        const merchantPubkey = new PublicKey(merchantWalletAddress);
+        const pdaResult = await subscriptionService.findSubscriptionStatePDA(
+          new PublicKey(publicKey),
+          merchantPubkey,
+          USDC_MINT
+        );
+        const subscriptionPDA = pdaResult[0];
+      const subscriptionPDAString = subscriptionPDA.toString();
         
         Alert.alert(
           errorTitle,
@@ -291,7 +302,7 @@ export default function SubscribeFromWebScreen() {
               text: 'View Current Subscription',
               onPress: () => {
                 if (error.subscriptionPDA) {
-                  router.replace(`../subscriptions/${error.subscriptionPDA}`);
+                  router.replace(`../subscriptions/${subscriptionPDAString}`);
                 }
               }
             },
