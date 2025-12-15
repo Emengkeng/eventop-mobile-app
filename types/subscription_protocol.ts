@@ -1086,6 +1086,19 @@ export type SubscriptionProtocol = {
   ],
   "events": [
     {
+      "name": "merchantPlanRegistered",
+      "discriminator": [
+        82,
+        211,
+        85,
+        158,
+        114,
+        80,
+        148,
+        147
+      ]
+    },
+    {
       "name": "paymentExecuted",
       "discriminator": [
         153,
@@ -1409,6 +1422,18 @@ export type SubscriptionProtocol = {
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "merchantPlanRegistered",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "planPda",
+            "type": "pubkey"
           }
         ]
       }
