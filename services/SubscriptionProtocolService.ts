@@ -15,6 +15,8 @@ import { BN, Program, AnchorProvider, Idl } from '@coral-xyz/anchor';
 import { APP_CONFIG } from '@/config/app';
 import localidl from '../idl/subscription_protocol.json';
 import type { SubscriptionProtocol } from '../types/subscription_protocol';
+import { ACCOUNT_DISCRIMINATORS } from '@/types';
+import bs58 from 'bs58';
 
 const PROGRAM_ID = new PublicKey('GPVtSfXPiy8y4SkJrMC3VFyKUmGVhMrRbAp2NhiW1Ds2');
 
@@ -612,7 +614,7 @@ export class SubscriptionProtocolService {
         {
           memcmp: {
             offset: 8, // After discriminator
-            bytes: userPublicKey.toBase58(),
+            bytes: bs58.encode(ACCOUNT_DISCRIMINATORS.SubscriptionState),
           },
         },
       ]);
@@ -649,7 +651,7 @@ export class SubscriptionProtocolService {
         {
           memcmp: {
             offset: 8, // After discriminator
-            bytes: merchantPublicKey.toBase58(),
+            bytes: bs58.encode(ACCOUNT_DISCRIMINATORS.MerchantPlan),
           },
         },
       ]);
