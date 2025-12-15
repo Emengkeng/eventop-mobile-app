@@ -391,15 +391,15 @@ export class SubscriptionProtocolService {
 
     const ix = await this.program.methods
       .subscribeWithWallet(sessionToken)
-      .accounts({
-        //subscriptionState: subscriptionStatePDA,
-        //sessionTokenTracker: sessionTokenTrackerPDA,
-        //subscriptionWallet: subscriptionWalletPDA,
+      .accountsPartial({
+        subscriptionState: subscriptionStatePDA,
+        sessionTokenTracker: sessionTokenTrackerPDA,
+        subscriptionWallet: subscriptionWalletPDA,
         merchantPlan: merchantPlanPDA,
         user: userPublicKey,
         walletTokenAccount: walletTokenAccount,
         walletYieldVault: PublicKey.default,
-       // systemProgram: SystemProgram.programId,
+        systemProgram: SystemProgram.programId,
       })
       .instruction();
 
