@@ -3,31 +3,69 @@ import { APP_CONFIG } from '@/config/app';
 import { useWalletStore } from '@/store/walletStore';
 
 export interface SubscriptionData {
-  createdAt: Date;
-  merchantWallet: string;
-  mint: string;
-  feeAmount: string;
-  paymentInterval: string;
-  isActive: boolean;
-  customerEmail: string | null;
-  customerId: string | null;
   subscriptionPda: string;
   userWallet: string;
   subscriptionWalletPda: string;
+  merchantWallet: string;
   merchantPlanPda: string;
+  mint: string;
+  feeAmount: string;
+  paymentInterval: string;
   lastPaymentTimestamp: string;
   totalPaid: string;
   paymentCount: number;
-  updatedAt: Date;
-  cancelledAt: Date | null;
+  isActive: boolean;
+  customerEmail: string | null;
+  customerId: string | null;
+  sessionToken: string;
+  createdAt: string;
+  updatedAt: string;
+  cancelledAt: string | null;
 }
 
 export interface UpcomingPayment {
   subscriptionPda: string;
   merchantWallet: string;
   amount: string;
-  daysUntil: number;
   nextPaymentDate: string;
+  daysUntil: number;
+}
+
+export interface SubscriptionDetail extends SubscriptionData {
+  transactions: Transaction[];
+}
+
+export interface Transaction {
+  id: string;
+  signature: string;
+  subscriptionPda: string;
+  type: string;
+  amount: string;
+  fromWallet: string;
+  toWallet: string;
+  blockTime: string;
+  slot: number;
+  status: string;
+  indexedAt: string;
+}
+
+export interface WalletBalance {
+  walletPda: string;
+  ownerWallet: string;
+  mint: string;
+  isYieldEnabled: boolean;
+  yieldStrategy: string | null;
+  yieldVault: string | null;
+  totalSubscriptions: number;
+  totalSpent: string;
+  createdAt: string;
+}
+
+export interface UserStats {
+  totalSubscriptions: number;
+  activeSubscriptions: number;
+  totalSpent: string;
+  subscriptions: SubscriptionData[];
 }
 
 export function useSubscriptions() {
@@ -139,7 +177,7 @@ export function useUpcomingPayments() {
 }
 
 export function useSubscription(subscriptionPda: string) {
-  const [data, setData] = useState<SubscriptionData | null>(null);
+  const [data, setData] = useState<SubscriptionDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
@@ -195,4 +233,46 @@ export function useSubscription(subscriptionPda: string) {
   };
 
   return { data, isLoading, error, refetch };
+}
+
+export function useUserStats() {
+  const publicKey = useWalletStore((state) => state.publicKey);
+  const [data, setData] = useState<UserStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      if (!publicKey) {
+        setData(null);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        const response = await fetch(
+          `${APP_CONFIG.APP_URL}/subscriptions/user/${publicKey}/stats`
+        );
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch stats');
+        }
+
+        const stats = await response.json();
+        setData(stats);
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching stats:', err);
+        setError(err as Error);
+        setData(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, [publicKey]);
+
+  return { data, isLoading, error };
 }
