@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -10,9 +10,11 @@ import { spacing } from '@/theme/spacing';
 import { radius } from '@/theme/radius';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import * as Clipboard from 'expo-clipboard';
 
 import { useSubscriptions, useUpcomingPayments } from '@/hooks/useSubscriptions';
 import { useUnifiedWallet } from '@/hooks/useUnifiedWallet';
+import { CopyableText } from '@/components/CopyText';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -30,6 +32,10 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
+  const copyToClipboard = async (message: string) => {
+    await Clipboard.setStringAsync(message);
+  }
+
   // Calculate stats from unified balance
   const activeSubscriptions = subscriptions?.filter((s: any) => s.isActive).length || 0;
 
@@ -45,9 +51,10 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>Good morning</Text>
-            <Text style={styles.walletAddress}>
-              {publicKey ? `${publicKey.slice(0, 4)}...${publicKey.slice(-4)}` : 'Connect Wallet'}
-            </Text>
+            <CopyableText
+              dataToCopy={publicKey!}
+              displayText={publicKey ? `${publicKey.slice(0, 4)}...${publicKey.slice(-4)}` : 'Connect Wallet'}
+            />
           </View>
           <TouchableOpacity
             style={styles.walletIcon}
