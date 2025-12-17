@@ -1,24 +1,198 @@
-import { useQuery } from '@tanstack/react-query';
-import { apiService } from '@/services/api';
+import { useState, useEffect } from 'react';
+import { APP_CONFIG } from '@/config/app';
 import { useWalletStore } from '@/store/walletStore';
+
+export interface SubscriptionData {
+  createdAt: Date;
+  merchantWallet: string;
+  mint: string;
+  feeAmount: string;
+  paymentInterval: string;
+  isActive: boolean;
+  customerEmail: string | null;
+  customerId: string | null;
+  subscriptionPda: string;
+  userWallet: string;
+  subscriptionWalletPda: string;
+  merchantPlanPda: string;
+  lastPaymentTimestamp: string;
+  totalPaid: string;
+  paymentCount: number;
+  updatedAt: Date;
+  cancelledAt: Date | null;
+}
+
+export interface UpcomingPayment {
+  subscriptionPda: string;
+  merchantWallet: string;
+  amount: string;
+  daysUntil: number;
+  nextPaymentDate: string;
+}
 
 export function useSubscriptions() {
   const publicKey = useWalletStore((state) => state.publicKey);
+  const [data, setData] = useState<SubscriptionData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
-  return useQuery({
-    queryKey: ['subscriptions', publicKey],
-    queryFn: () => apiService.getUserSubscriptions(publicKey!),
-    enabled: !!publicKey,
-    refetchInterval: 30000, // Refetch every 30s
-  });
+  useEffect(() => {
+    const fetchSubscriptions = async () => {
+      if (!publicKey) {
+        setData([]);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        const response = await fetch(
+          `${APP_CONFIG.APP_URL}/subscriptions/user/${publicKey}`
+        );
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch subscriptions');
+        }
+
+        const subscriptions = await response.json();
+        setData(subscriptions);
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching subscriptions:', err);
+        setError(err as Error);
+        setData([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchSubscriptions();
+  }, [publicKey]);
+
+  const refetch = async () => {
+    if (!publicKey) return;
+
+    try {
+      setIsLoading(true);
+      const response = await fetch(
+        `${APP_CONFIG.APP_URL}/subscriptions/user/${publicKey}`
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch subscriptions');
+      }
+
+      const subscriptions = await response.json();
+      setData(subscriptions);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching subscriptions:', err);
+      setError(err as Error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return { data, isLoading, error, refetch };
 }
 
 export function useUpcomingPayments() {
   const publicKey = useWalletStore((state) => state.publicKey);
+  const [data, setData] = useState<UpcomingPayment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
-  return useQuery({
-    queryKey: ['upcoming-payments', publicKey],
-    queryFn: () => apiService.getUpcomingPayments(publicKey!),
-    enabled: !!publicKey,
-  });
+  useEffect(() => {
+    const fetchUpcomingPayments = async () => {
+      if (!publicKey) {
+        setData([]);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        const response = await fetch(
+          `${APP_CONFIG.APP_URL}/subscriptions/user/${publicKey}/upcoming`
+        );
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch upcoming payments');
+        }
+
+        const payments = await response.json();
+        setData(payments);
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching upcoming payments:', err);
+        setError(err as Error);
+        setData([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchUpcomingPayments();
+  }, [publicKey]);
+
+  return { data, isLoading, error };
+}
+
+export function useSubscription(subscriptionPda: string) {
+  const [data, setData] = useState<SubscriptionData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    const fetchSubscription = async () => {
+      try {
+        setIsLoading(true);
+        const response = await fetch(
+          `${APP_CONFIG.APP_URL}/subscriptions/${subscriptionPda}`
+        );
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch subscription');
+        }
+
+        const subscription = await response.json();
+        setData(subscription);
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching subscription:', err);
+        setError(err as Error);
+        setData(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (subscriptionPda) {
+      fetchSubscription();
+    }
+  }, [subscriptionPda]);
+
+  const refetch = async () => {
+    try {
+      setIsLoading(true);
+      const response = await fetch(
+        `${APP_CONFIG.APP_URL}/subscriptions/${subscriptionPda}`
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch subscription');
+      }
+
+      const subscription = await response.json();
+      setData(subscription);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching subscription:', err);
+      setError(err as Error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return { data, isLoading, error, refetch };
 }
