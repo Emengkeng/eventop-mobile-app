@@ -22,6 +22,7 @@ import { Card } from '@/components/ui/Card';
 import { useWalletStore } from '@/store/walletStore';
 import LinkAccounts from '@/components/userManagement/LinkAccounts';
 import UnlinkAccounts from '@/components/userManagement/UnlinkAccounts';
+import * as Application from 'expo-application';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -207,7 +208,7 @@ export default function ProfileScreen() {
         </Card>
 
         {/* Version */}
-        <Text style={styles.version}>Version 1.0.0</Text>
+        <Text style={styles.version}>{Application.nativeBuildVersion}</Text>
       </ScrollView>
     </SafeAreaView>
   );

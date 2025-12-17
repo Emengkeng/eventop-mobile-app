@@ -7,8 +7,10 @@
     "preview": {
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
-      }
+        "buildType": "apk",
+        "buildNumber": "..."
+      },
+      "autoIncrement": true
     },
     "production": {}
   }
