@@ -18,6 +18,7 @@ import { CopyableText } from '@/components/CopyText';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const [greeting, setGreeting] = useState('');
   
   const { publicKey, balance, loading, refreshBalance } = useUnifiedWallet();
   
@@ -29,8 +30,26 @@ export default function HomeScreen() {
   const onRefresh = async () => {
     setRefreshing(true);
     await Promise.all([refetch(), refreshBalance()]);
+    setGreeting(getGreeting());
     setRefreshing(false);
   };
+
+  const getGreeting = () => {
+    const now = new Date();
+    const hrs = now.getHours();
+    let msg = "";
+
+    if (hrs >= 5 && hrs < 12) {
+      msg = "Good morning";
+    } else if (hrs >= 12 && hrs < 18) {
+      msg = "Good afternoon";
+    } else {
+      msg = "Good evening";
+    }
+
+    return msg;
+  };
+
 
   // Calculate stats from unified balance
   const activeSubscriptions = subscriptions?.filter((s: any) => s.isActive).length || 0;
@@ -46,7 +65,7 @@ export default function HomeScreen() {
         {/* Header - Shows ONLY the Privy wallet address */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Good morning</Text>
+            <Text style={styles.greeting}>{greeting}</Text>
             <CopyableText
               dataToCopy={publicKey!}
               displayText={publicKey ? `${publicKey.slice(0, 4)}...${publicKey.slice(-4)}` : 'Connect Wallet'}
