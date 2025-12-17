@@ -32,10 +32,6 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
-  const copyToClipboard = async (message: string) => {
-    await Clipboard.setStringAsync(message);
-  }
-
   // Calculate stats from unified balance
   const activeSubscriptions = subscriptions?.filter((s: any) => s.isActive).length || 0;
 
