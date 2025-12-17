@@ -614,7 +614,7 @@ export class SubscriptionProtocolService {
         {
           memcmp: {
             offset: 8, // After discriminator
-            bytes: userPublicKey.toBase58(),
+            bytes: bs58.encode(ACCOUNT_DISCRIMINATORS.SubscriptionState),
           },
         },
       ]);

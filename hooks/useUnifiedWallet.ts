@@ -3,6 +3,7 @@ import { useEmbeddedSolanaWallet } from '@privy-io/expo';
 import { PublicKey } from '@solana/web3.js';
 import { UnifiedWalletService } from '@/services/UnifiedWalletService';
 import { subscriptionService } from '@/services/SubscriptionProtocolService';
+import { useSubscriptions } from './useSubscriptions';
 
 export interface UnifiedBalance {
   total: number;
@@ -13,6 +14,8 @@ export interface UnifiedBalance {
 export function useUnifiedWallet() {
   const { wallets, create: createSolanaWallet } = useEmbeddedSolanaWallet();
   const privyWallet = wallets?.[0];
+  
+  const { data: subscriptions, isLoading: subsLoading, refetch: refetchSubscriptions } = useSubscriptions();
   
   const [balance, setBalance] = useState<UnifiedBalance>({
     total: 0,
@@ -25,28 +28,39 @@ export function useUnifiedWallet() {
   const publicKey = privyWallet?.publicKey || null;
   const isConnected = !!publicKey;
 
-  // Load balance
   const loadBalance = useCallback(async () => {
-    if (!privyWallet || !isConnected) {
+    if (!privyWallet || !isConnected || subsLoading) {
       setBalance({ total: 0, available: 0, committed: 0 });
       return;
     }
 
     try {
-      const balanceData = await UnifiedWalletService.getUnifiedBalance(privyWallet);
-      setBalance(balanceData);
+      const committed = subscriptions
+        .filter(sub => sub.isActive)
+        .reduce((sum, sub) => {
+          const monthlyFee = parseFloat(sub.feeAmount) / 1_000_000;
+          return sum + (monthlyFee * 3); // 3 months buffer
+        }, 0);
+
+      const userPubkey = new PublicKey(privyWallet.publicKey);
+      const subscriptionBalance = await subscriptionService.getWalletBalance(userPubkey);
+
+      setBalance({
+        total: subscriptionBalance,
+        available: Math.max(0, subscriptionBalance - committed),
+        committed,
+      });
     } catch (err: any) {
       console.error('Failed to load balance:', err);
       setError(err.message);
     }
-  }, [privyWallet, isConnected]);
+  }, [privyWallet, isConnected, subscriptions, subsLoading]);
 
-  // Auto-load balance when wallet connects
   useEffect(() => {
-    if (isConnected) {
+    if (isConnected && !subsLoading) {
       loadBalance();
     }
-  }, [isConnected, loadBalance]);
+  }, [isConnected, loadBalance, subsLoading]);
 
   /**
    * Deposit funds to subscription wallet
@@ -63,7 +77,6 @@ export function useUnifiedWallet() {
       try {
         const signature = await UnifiedWalletService.deposit(privyWallet, amount);
         
-        // Reload balance after deposit
         await loadBalance();
         
         return signature;
@@ -87,7 +100,6 @@ export function useUnifiedWallet() {
         throw new Error('Wallet not connected');
       }
 
-      // Check if user has enough available balance
       if (amount > balance.available) {
         throw new Error(
           `Insufficient available balance. You have $${balance.available.toFixed(2)} available, but $${balance.committed.toFixed(2)} is committed to active subscriptions.`
@@ -100,7 +112,6 @@ export function useUnifiedWallet() {
       try {
         const signature = await UnifiedWalletService.withdraw(privyWallet, amount);
         
-        // Reload balance after withdrawal
         await loadBalance();
         
         return signature;
@@ -132,7 +143,6 @@ export function useUnifiedWallet() {
       setError(null);
 
       try {
-        // Check for existing subscription
         const userPubkey = new PublicKey(privyWallet.publicKey);
         const [subscriptionPDA] = await subscriptionService.findSubscriptionStatePDA(
           userPubkey,
@@ -148,7 +158,6 @@ export function useUnifiedWallet() {
           );
         }
 
-        // Execute subscription
         const signature = await UnifiedWalletService.subscribe(
           privyWallet,
           merchantPublicKey,
@@ -156,7 +165,7 @@ export function useUnifiedWallet() {
           sessionToken
         );
         
-        // Reload balance after subscription
+        await refetchSubscriptions();
         await loadBalance();
         
         return signature;
@@ -168,7 +177,7 @@ export function useUnifiedWallet() {
         setLoading(false);
       }
     },
-    [privyWallet, loadBalance]
+    [privyWallet, loadBalance, refetchSubscriptions]
   );
 
   /**
@@ -184,7 +193,6 @@ export function useUnifiedWallet() {
       setError(null);
 
       try {
-        // Verify subscription exists and is active
         const userPubkey = new PublicKey(privyWallet.publicKey);
         const [subscriptionPDA] = await subscriptionService.findSubscriptionStatePDA(
           userPubkey,
@@ -202,7 +210,6 @@ export function useUnifiedWallet() {
           throw new Error('This subscription is already cancelled');
         }
 
-        // Execute cancellation
         const signature = await UnifiedWalletService.cancelSubscription(
           privyWallet,
           merchantPublicKey
@@ -210,7 +217,7 @@ export function useUnifiedWallet() {
         
         console.log('✅ Subscription cancelled:', signature);
         
-        // Reload balance after cancellation (committed amount should decrease)
+        await refetchSubscriptions();
         await loadBalance();
         
         return signature;
@@ -222,7 +229,7 @@ export function useUnifiedWallet() {
         setLoading(false);
       }
     },
-    [privyWallet, loadBalance]
+    [privyWallet, loadBalance, refetchSubscriptions]
   );
 
   /**
@@ -257,14 +264,12 @@ export function useUnifiedWallet() {
   }, [privyWallet]);
 
   return {
-    // Wallet state
     publicKey,
     isConnected,
     balance,
     loading,
     error,
 
-    // Actions
     deposit,
     withdraw,
     subscribe,
