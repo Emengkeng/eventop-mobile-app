@@ -1,61 +1,59 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { MaterialIcons } from '@expo/vector-icons'; 
+import { Copy, Check } from 'lucide-react-native';
+import { colors } from '@/theme/colors';
+import { typography } from '@/theme/typography';
+import { spacing } from '@/theme/spacing';
+import { radius } from '@/theme/radius';
 
-interface CopyProps {
-    dataToCopy: string;
-    displayText: string;
+interface CopyableTextProps {
+  dataToCopy: string;
+  displayText: string;
 }
 
-export function CopyableText ({ 
-    dataToCopy, 
-    displayText 
-}: CopyProps) {
+export function CopyableText({ dataToCopy, displayText }: CopyableTextProps) {
   const [copied, setCopied] = useState(false);
 
   const copyToClipboard = async () => {
     await Clipboard.setStringAsync(dataToCopy);
-    
     setCopied(true);
     
-    Alert.alert('Copied!', `${displayText || dataToCopy} has been copied to your clipboard.`);
-
     setTimeout(() => {
       setCopied(false);
     }, 2000);
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.text}>{displayText || dataToCopy}</Text>
-      <TouchableOpacity onPress={copyToClipboard} style={styles.iconButton}>
-        <MaterialIcons 
-          name={copied ? "check-circle-outline" : "content-copy"} 
-          size={24} 
-          color={copied ? "green" : "blue"} 
-        />
-      </TouchableOpacity>
-    </View>
+    <TouchableOpacity 
+      style={styles.container} 
+      onPress={copyToClipboard}
+      activeOpacity={0.7}
+    >
+      <Text style={styles.text}>{displayText}</Text>
+      <View style={styles.iconContainer}>
+        {copied ? (
+          <Check size={16} color={colors.success} />
+        ) : (
+          <Copy size={16} color={colors.mutedForeground} />
+        )}
+      </View>
+    </TouchableOpacity>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 10,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 5,
-    margin: 10,
+    gap: spacing.xs,
+    marginTop: spacing.xs,
   },
   text: {
-    flex: 1,
-    marginRight: 10,
+    ...typography.h3,
+    color: colors.foreground,
   },
-  iconButton: {
-    padding: 5,
+  iconContainer: {
+    padding: spacing.xs,
   },
 });
