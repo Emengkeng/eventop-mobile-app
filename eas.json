@@ -7,11 +7,13 @@
     "preview": {
       "distribution": "internal",
       "android": {
-        "buildType": "apk",
-        "buildNumber": "..."
+        "buildType": "apk"
       },
       "autoIncrement": true
     },
     "production": {}
+  },
+  "cli": {
+    "appVersionSource": "remote"
   }
 }

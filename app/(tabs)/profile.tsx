@@ -34,8 +34,9 @@ export default function ProfileScreen() {
   // Get user's email or OAuth info
   const userLinkedAccounts = user?.linked_accounts || [];
   const googleAccount = userLinkedAccounts.find((acc: { type: string; }) => acc.type === 'google_oauth');
+  const emailAccount = userLinkedAccounts.find((acc: { type: string; }) => acc.type === 'email');
   const twitterAccount = userLinkedAccounts.find((acc: { type: string; }) => acc.type === 'twitter_oauth');
-  const userEmail = googleAccount?.email || twitterAccount?.username || user?.id;
+  const userEmail = googleAccount?.email || twitterAccount?.username || emailAccount?.address || user?.id;
 
   const handleLogout = () => {
     Alert.alert(
@@ -119,7 +120,7 @@ export default function ProfileScreen() {
           </View>
           <View style={styles.userInfo}>
             <Text style={styles.userName}>
-              {googleAccount?.name || twitterAccount?.username || 'User'}
+              { googleAccount?.name || twitterAccount?.username || 'User'}
             </Text>
             {userEmail && (
               <View style={styles.emailRow}>
