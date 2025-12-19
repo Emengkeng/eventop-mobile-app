@@ -2,7 +2,7 @@
 
 A mobile-first subscription management app built on Solana that lets users pay for services in crypto while maintaining full custody and earning yield on idle funds.
 
-[Download Testnet APK](https://expo.dev/artifacts/eas/hSQDeyJvU7aFoEVLgaMyzz.apk)
+[Download Testnet APK](https://expo.dev/artifacts/eas/wnBeLvhhs4fYWyper1TR7T.apk)
 
 ## What It Does
 
