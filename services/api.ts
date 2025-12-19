@@ -12,13 +12,31 @@ export const api = axios.create({
   },
 });
 
+let getAccessTokenFn: (() => Promise<string | null>) | null = null;
+
+export const setAuthTokenGetter = (getter: () => Promise<string | null>) => {
+  getAccessTokenFn = getter;
+};
+
 api.interceptors.request.use(
-  (config) => {
-    const { authToken } = useWalletStore.getState();
-    
-    if (authToken) {
-      config.headers.Authorization = `Bearer ${authToken}`;
+  async (config) => {
+    try {
+      if (getAccessTokenFn) {
+        const authToken = await getAccessTokenFn();
+        if (authToken) {
+          config.headers.Authorization = `Bearer ${authToken}`;
+          return config;
+        }
+      }
+      
+      const { authToken } = useWalletStore.getState();
+      if (authToken) {
+        config.headers.Authorization = `Bearer ${authToken}`;
+      }
+    } catch (error) {
+      console.error('Error getting auth token:', error);
     }
+    
     return config;
   },
   (error) => {

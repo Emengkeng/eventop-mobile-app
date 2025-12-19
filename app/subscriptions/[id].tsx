@@ -73,13 +73,14 @@ export default function SubscriptionDetailScreen() {
       
       // Fetch subscription detail
       const subData = await apiService.getSubscriptionDetail(id);
-      console.log("subscription data", subData)
+      // console.log("subscription data", subData)
       setSubscription(subData);
 
       // Fetch merchant plan details
       if (subData.merchantPlanPda) {
         try {
           const planData = await apiService.getPlanDetail(subData.merchantPlanPda);
+          // console.log("plan data", planData)
           setMerchantPlan(planData);
         } catch (error) {
           console.log('Could not fetch plan details:', error);

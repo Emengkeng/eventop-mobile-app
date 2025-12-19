@@ -1,6 +1,7 @@
 import { PRIVY_CONFIG } from '@/config/privy';
 import { useWalletStore } from '@/store/walletStore';
 import { PrivyProvider, usePrivy } from '@privy-io/expo';
+import { setAuthTokenGetter } from '@/services/api';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -20,10 +21,16 @@ const queryClient = new QueryClient({
 });
 
 function RootNavigator() {
-  const { isReady, user, logout } = usePrivy();
+  const { isReady, user, logout, getAccessToken } = usePrivy();
   const hydrate = useWalletStore((state) => state.hydrate);
   const segments = useSegments();
   const router = useRouter();
+
+  useEffect(() => {
+    if (isReady) {
+      setAuthTokenGetter(getAccessToken);
+    }
+  }, [isReady, getAccessToken]);
 
   useEffect(() => {
     hydrate();
@@ -73,7 +80,6 @@ function RootNavigator() {
       const sessionId = url.split('sessionId=')[1]?.split('&')[0];
       
       if (sessionId) {
-        
         if (!user) {
           AsyncStorage.setItem('pendingDeepLink', url);
         } else {
