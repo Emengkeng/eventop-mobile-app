@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { APP_CONFIG } from '@/config/app';
 import { useWalletStore } from '@/store/walletStore';
 
+
 export interface SubscriptionData {
   subscriptionPda: string;
   userWallet: string;
@@ -70,9 +71,15 @@ export interface UserStats {
 
 export function useSubscriptions() {
   const publicKey = useWalletStore((state) => state.publicKey);
+  const authToken = useWalletStore((state) => state.authToken)
   const [data, setData] = useState<SubscriptionData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  let authHeader: string;
+
+  if (authToken) {
+    authHeader = `Bearer ${authToken}`;
+  }
 
   useEffect(() => {
     const fetchSubscriptions = async () => {
@@ -85,7 +92,14 @@ export function useSubscriptions() {
       try {
         setIsLoading(true);
         const response = await fetch(
-          `${APP_CONFIG.APP_URL}/subscriptions/user/${publicKey}`
+          `${APP_CONFIG.APP_URL}/subscriptions/user/${publicKey}`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': authHeader,
+              'Content-Type': 'application/json',
+            },
+          }
         );
 
         if (!response.ok) {
@@ -113,7 +127,14 @@ export function useSubscriptions() {
     try {
       setIsLoading(true);
       const response = await fetch(
-        `${APP_CONFIG.APP_URL}/subscriptions/user/${publicKey}`
+        `${APP_CONFIG.APP_URL}/subscriptions/user/${publicKey}`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': authHeader,
+            'Content-Type': 'application/json',
+          },
+        }
       );
 
       if (!response.ok) {
@@ -136,9 +157,15 @@ export function useSubscriptions() {
 
 export function useUpcomingPayments() {
   const publicKey = useWalletStore((state) => state.publicKey);
+  const authToken = useWalletStore((state) => state.authToken)
   const [data, setData] = useState<UpcomingPayment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  let authHeader: string;
+
+  if (authToken) {
+    authHeader = `Bearer ${authToken}`;
+  }
 
   useEffect(() => {
     const fetchUpcomingPayments = async () => {
@@ -151,7 +178,14 @@ export function useUpcomingPayments() {
       try {
         setIsLoading(true);
         const response = await fetch(
-          `${APP_CONFIG.APP_URL}/subscriptions/user/${publicKey}/upcoming`
+          `${APP_CONFIG.APP_URL}/subscriptions/user/${publicKey}/upcoming`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': authHeader,
+              'Content-Type': 'application/json',
+            },
+          }
         );
 
         if (!response.ok) {
@@ -177,16 +211,30 @@ export function useUpcomingPayments() {
 }
 
 export function useSubscription(subscriptionPda: string) {
+  const authToken = useWalletStore((state) => state.authToken)
   const [data, setData] = useState<SubscriptionDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+
+  let authHeader: string;
+
+  if (authToken) {
+    authHeader = `Bearer ${authToken}`;
+  }
 
   useEffect(() => {
     const fetchSubscription = async () => {
       try {
         setIsLoading(true);
         const response = await fetch(
-          `${APP_CONFIG.APP_URL}/subscriptions/${subscriptionPda}`
+          `${APP_CONFIG.APP_URL}/subscriptions/${subscriptionPda}`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': authHeader,
+              'Content-Type': 'application/json',
+            },
+          }
         );
 
         if (!response.ok) {
@@ -237,9 +285,16 @@ export function useSubscription(subscriptionPda: string) {
 
 export function useUserStats() {
   const publicKey = useWalletStore((state) => state.publicKey);
+  const authToken = useWalletStore((state) => state.authToken)
   const [data, setData] = useState<UserStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+
+  let authHeader: string;
+
+  if (authToken) {
+    authHeader = `Bearer ${authToken}`;
+  }
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -252,7 +307,14 @@ export function useUserStats() {
       try {
         setIsLoading(true);
         const response = await fetch(
-          `${APP_CONFIG.APP_URL}/subscriptions/user/${publicKey}/stats`
+          `${APP_CONFIG.APP_URL}/subscriptions/user/${publicKey}/stats`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': authHeader,
+              'Content-Type': 'application/json',
+            },
+          }
         );
 
         if (!response.ok) {
