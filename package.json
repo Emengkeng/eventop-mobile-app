@@ -1,7 +1,7 @@
 {
   "name": "eventop",
   "main": "entrypoint.js",
-  "version": "1.0.1",
+  "version": "1.0.5",
   "scripts": {
     "start": "expo start --tunnel",
     "android": "expo run:android",
