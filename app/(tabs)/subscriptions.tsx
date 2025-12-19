@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -9,12 +9,14 @@ import { spacing } from '@/theme/spacing';
 import { radius } from '@/theme/radius';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { useSubscriptions } from '@/hooks/useSubscriptions';
+import { SubscriptionData, useSubscriptions } from '@/hooks/useSubscriptions';
+import { APP_CONFIG } from '@/config/app';
+import { useWalletStore } from '@/store/walletStore';
 
 export default function SubscriptionsScreen() {
   const router = useRouter();
   const { data: subscriptions, isLoading } = useSubscriptions();
-  console.log('Subscriptions data:', subscriptions);
+  // console.log('Subscriptions:', subscriptions);
 
   const activeSubscriptions = subscriptions?.filter((s: { isActive: any; }) => s.isActive) || [];
   const inactiveSubscriptions = subscriptions?.filter((s: { isActive: any; }) => !s.isActive) || [];

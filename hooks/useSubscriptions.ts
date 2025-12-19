@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { APP_CONFIG } from '@/config/app';
 import { useWalletStore } from '@/store/walletStore';
-
+import { useEmbeddedSolanaWallet, usePrivy } from '@privy-io/expo';
 
 export interface SubscriptionData {
   subscriptionPda: string;
@@ -70,75 +70,51 @@ export interface UserStats {
 }
 
 export function useSubscriptions() {
-  const publicKey = useWalletStore((state) => state.publicKey);
-  const authToken = useWalletStore((state) => state.authToken)
+  const { user, getAccessToken } = usePrivy();
+  const { wallets } = useEmbeddedSolanaWallet();
   const [data, setData] = useState<SubscriptionData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  let authHeader: string;
 
-  if (authToken) {
-    authHeader = `Bearer ${authToken}`;
-  }
+  const privyWallet = wallets?.[0];
+  const publicKey = privyWallet?.publicKey;
 
-  useEffect(() => {
-    const fetchSubscriptions = async () => {
-      if (!publicKey) {
+  const fetchSubscriptions = useCallback(async () => {
+    if (!publicKey) {
+      setData([]);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const authToken = await getAccessToken();
+      
+      if (!authToken) {
+        console.warn('No auth token available');
         setData([]);
         setIsLoading(false);
         return;
       }
 
-      try {
-        setIsLoading(true);
-        const response = await fetch(
-          `${APP_CONFIG.APP_URL}/subscriptions/user/${publicKey}`,
-          {
-            method: 'GET',
-            headers: {
-              'Authorization': authHeader,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch subscriptions');
-        }
-
-        const subscriptions = await response.json();
-        setData(subscriptions);
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching subscriptions:', err);
-        setError(err as Error);
-        setData([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchSubscriptions();
-  }, [publicKey]);
-
-  const refetch = async () => {
-    if (!publicKey) return;
-
-    try {
       setIsLoading(true);
+      console.log('Fetching subscriptions for:', publicKey);
+      
       const response = await fetch(
         `${APP_CONFIG.APP_URL}/subscriptions/user/${publicKey}`,
         {
-          method: 'GET',
           headers: {
-            'Authorization': authHeader,
+            'Authorization': `Bearer ${authToken}`,
             'Content-Type': 'application/json',
           },
         }
       );
 
+      console.log('Response status:', response.status);
+
       if (!response.ok) {
-        throw new Error('Failed to fetch subscriptions');
+        const errorText = await response.text();
+        console.error('API Error:', errorText);
+        throw new Error(`Failed to fetch subscriptions: ${response.status}`);
       }
 
       const subscriptions = await response.json();
@@ -147,122 +123,110 @@ export function useSubscriptions() {
     } catch (err) {
       console.error('Error fetching subscriptions:', err);
       setError(err as Error);
+      setData([]);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [publicKey, getAccessToken]);
 
-  return { data, isLoading, error, refetch };
+  useEffect(() => {
+    fetchSubscriptions();
+  }, [fetchSubscriptions]);
+
+  return { data, isLoading, error, refetch: fetchSubscriptions };
 }
 
 export function useUpcomingPayments() {
-  const publicKey = useWalletStore((state) => state.publicKey);
-  const authToken = useWalletStore((state) => state.authToken)
+  const { getAccessToken } = usePrivy();
+  const { wallets } = useEmbeddedSolanaWallet();
   const [data, setData] = useState<UpcomingPayment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  let authHeader: string;
 
-  if (authToken) {
-    authHeader = `Bearer ${authToken}`;
-  }
+  const privyWallet = wallets?.[0];
+  const publicKey = privyWallet?.publicKey;
 
-  useEffect(() => {
-    const fetchUpcomingPayments = async () => {
-      if (!publicKey) {
+  const fetchUpcomingPayments = useCallback(async () => {
+    if (!publicKey) {
+      setData([]);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const authToken = await getAccessToken();
+      
+      if (!authToken) {
+        console.warn('No auth token available');
         setData([]);
         setIsLoading(false);
         return;
       }
 
-      try {
-        setIsLoading(true);
-        const response = await fetch(
-          `${APP_CONFIG.APP_URL}/subscriptions/user/${publicKey}/upcoming`,
-          {
-            method: 'GET',
-            headers: {
-              'Authorization': authHeader,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch upcoming payments');
+      setIsLoading(true);
+      const response = await fetch(
+        `${APP_CONFIG.APP_URL}/subscriptions/user/${publicKey}/upcoming`,
+        {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+          },
         }
+      );
 
-        const payments = await response.json();
-        setData(payments);
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching upcoming payments:', err);
-        setError(err as Error);
-        setData([]);
-      } finally {
-        setIsLoading(false);
+      if (!response.ok) {
+        throw new Error('Failed to fetch upcoming payments');
       }
-    };
 
+      const payments = await response.json();
+      setData(payments);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching upcoming payments:', err);
+      setError(err as Error);
+      setData([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [publicKey, getAccessToken]);
+
+  useEffect(() => {
     fetchUpcomingPayments();
-  }, [publicKey]);
+  }, [fetchUpcomingPayments]);
 
-  return { data, isLoading, error };
+  return { data, isLoading, error, refetch: fetchUpcomingPayments };
 }
 
 export function useSubscription(subscriptionPda: string) {
-  const authToken = useWalletStore((state) => state.authToken)
+  const { getAccessToken } = usePrivy();
   const [data, setData] = useState<SubscriptionDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  let authHeader: string;
-
-  if (authToken) {
-    authHeader = `Bearer ${authToken}`;
-  }
-
-  useEffect(() => {
-    const fetchSubscription = async () => {
-      try {
-        setIsLoading(true);
-        const response = await fetch(
-          `${APP_CONFIG.APP_URL}/subscriptions/${subscriptionPda}`,
-          {
-            method: 'GET',
-            headers: {
-              'Authorization': authHeader,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch subscription');
-        }
-
-        const subscription = await response.json();
-        setData(subscription);
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching subscription:', err);
-        setError(err as Error);
-        setData(null);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    if (subscriptionPda) {
-      fetchSubscription();
+  const fetchSubscription = useCallback(async () => {
+    if (!subscriptionPda) {
+      setIsLoading(false);
+      return;
     }
-  }, [subscriptionPda]);
 
-  const refetch = async () => {
     try {
+      const authToken = await getAccessToken();
+      
+      if (!authToken) {
+        console.warn('No auth token available');
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
       const response = await fetch(
-        `${APP_CONFIG.APP_URL}/subscriptions/${subscriptionPda}`
+        `${APP_CONFIG.APP_URL}/subscriptions/${subscriptionPda}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
       );
 
       if (!response.ok) {
@@ -275,66 +239,76 @@ export function useSubscription(subscriptionPda: string) {
     } catch (err) {
       console.error('Error fetching subscription:', err);
       setError(err as Error);
+      setData(null);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [subscriptionPda, getAccessToken]);
 
-  return { data, isLoading, error, refetch };
+  useEffect(() => {
+    fetchSubscription();
+  }, [fetchSubscription]);
+
+  return { data, isLoading, error, refetch: fetchSubscription };
 }
 
 export function useUserStats() {
-  const publicKey = useWalletStore((state) => state.publicKey);
-  const authToken = useWalletStore((state) => state.authToken)
+  const { getAccessToken } = usePrivy();
+  const { wallets } = useEmbeddedSolanaWallet();
   const [data, setData] = useState<UserStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  let authHeader: string;
+  const privyWallet = wallets?.[0];
+  const publicKey = privyWallet?.publicKey;
 
-  if (authToken) {
-    authHeader = `Bearer ${authToken}`;
-  }
+  const fetchStats = useCallback(async () => {
+    if (!publicKey) {
+      setData(null);
+      setIsLoading(false);
+      return;
+    }
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      if (!publicKey) {
+    try {
+      const authToken = await getAccessToken();
+      
+      if (!authToken) {
+        console.warn('No auth token available');
         setData(null);
         setIsLoading(false);
         return;
       }
 
-      try {
-        setIsLoading(true);
-        const response = await fetch(
-          `${APP_CONFIG.APP_URL}/subscriptions/user/${publicKey}/stats`,
-          {
-            method: 'GET',
-            headers: {
-              'Authorization': authHeader,
-              'Content-Type': 'application/json',
-            },
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch stats');
+      setIsLoading(true);
+      const response = await fetch(
+        `${APP_CONFIG.APP_URL}/subscriptions/user/${publicKey}/stats`,
+        {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+          },
         }
+      );
 
-        const stats = await response.json();
-        setData(stats);
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching stats:', err);
-        setError(err as Error);
-        setData(null);
-      } finally {
-        setIsLoading(false);
+      if (!response.ok) {
+        throw new Error('Failed to fetch stats');
       }
-    };
 
+      const stats = await response.json();
+      setData(stats);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching stats:', err);
+      setError(err as Error);
+      setData(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [publicKey, getAccessToken]);
+
+  useEffect(() => {
     fetchStats();
-  }, [publicKey]);
+  }, [fetchStats]);
 
-  return { data, isLoading, error };
+  return { data, isLoading, error, refetch: fetchStats };
 }
