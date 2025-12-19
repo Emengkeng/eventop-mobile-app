@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Calendar, DollarSign, Activity, AlertCircle } from 'lucide-react-native';
+import { ArrowLeft, Calendar, DollarSign, Activity, AlertCircle, Building2 } from 'lucide-react-native';
 import { format } from 'date-fns';
 import { colors } from '@/theme/colors';
 import { typography } from '@/theme/typography';
@@ -47,6 +47,12 @@ interface MerchantPlan {
   description?: string;
 }
 
+interface MerchantInfo {
+  walletAddress: string;
+  companyName: string;
+  logoUrl?: string;
+}
+
 export default function SubscriptionDetailScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
@@ -54,6 +60,7 @@ export default function SubscriptionDetailScreen() {
 
   const [subscription, setSubscription] = useState<SubscriptionDetail | null>(null);
   const [merchantPlan, setMerchantPlan] = useState<MerchantPlan | null>(null);
+  const [merchantInfo, setMerchantInfo] = useState<MerchantInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
 
@@ -73,19 +80,28 @@ export default function SubscriptionDetailScreen() {
       
       // Fetch subscription detail
       const subData = await apiService.getSubscriptionDetail(id);
-      // console.log("subscription data", subData)
       setSubscription(subData);
 
-      // Fetch merchant plan details
+      // Fetch merchant plan details and merchant info in parallel
+      const promises = [];
+      
       if (subData.merchantPlanPda) {
-        try {
-          const planData = await apiService.getPlanDetail(subData.merchantPlanPda);
-          // console.log("plan data", planData)
-          setMerchantPlan(planData);
-        } catch (error) {
-          console.log('Could not fetch plan details:', error);
-        }
+        promises.push(
+          apiService.getPlanDetail(subData.merchantPlanPda)
+            .then(planData => setMerchantPlan(planData))
+            .catch(error => console.log('Could not fetch plan details:', error))
+        );
       }
+
+      if (subData.merchantWallet) {
+        promises.push(
+          apiService.getMerchantPublicInfo(subData.merchantWallet)
+            .then(merchantData => setMerchantInfo(merchantData))
+            .catch(error => console.log('Could not fetch merchant info:', error))
+        );
+      }
+
+      await Promise.all(promises);
     } catch (error) {
       console.error('Failed to load subscription:', error);
       Alert.alert(
@@ -177,8 +193,9 @@ export default function SubscriptionDetailScreen() {
     (nextPaymentDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
   );
 
-  const merchantName = merchantPlan?.planName || 'Subscription Service';
+  const merchantName = merchantInfo?.companyName || 'Unknown Merchant';
   const planName = merchantPlan?.planName || 'Subscription Plan';
+  const merchantLogo = merchantInfo?.logoUrl;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -195,9 +212,17 @@ export default function SubscriptionDetailScreen() {
         {/* Merchant Card */}
         <Card style={styles.merchantCard}>
           <View style={styles.merchantIcon}>
-            <Text style={styles.merchantIconText}>
-              {merchantName.slice(0, 2).toUpperCase()}
-            </Text>
+            {merchantLogo ? (
+              <Image 
+                source={{ uri: merchantLogo }} 
+                style={styles.merchantLogo}
+                resizeMode="cover"
+              />
+            ) : (
+              <>
+                <Building2 size={32} color={colors.mutedForeground} />
+              </>
+            )}
           </View>
           <Text style={styles.merchantName}>{merchantName}</Text>
           <Text style={styles.planName}>{planName}</Text>
@@ -303,13 +328,11 @@ export default function SubscriptionDetailScreen() {
 
           <View style={styles.infoRows}>
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Subscription ID</Text>
-              <Text style={styles.infoValue} numberOfLines={1}>
-                {subscription.subscriptionPda.slice(0, 8)}...{subscription.subscriptionPda.slice(-8)}
-              </Text>
+              <Text style={styles.infoLabel}>Merchant</Text>
+              <Text style={styles.infoValue}>{merchantName}</Text>
             </View>
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Merchant</Text>
+              <Text style={styles.infoLabel}>Wallet Address</Text>
               <Text style={styles.infoValue} numberOfLines={1}>
                 {subscription.merchantWallet.slice(0, 8)}...{subscription.merchantWallet.slice(-8)}
               </Text>
@@ -444,6 +467,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.md,
+    overflow: 'hidden',
+  },
+  merchantLogo: {
+    width: '100%',
+    height: '100%',
   },
   merchantIconText: {
     ...typography.h2,

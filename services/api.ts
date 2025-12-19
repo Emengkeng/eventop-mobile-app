@@ -2,7 +2,7 @@ import axios from 'axios';
 import { useWalletStore } from '@/store/walletStore';
 import { APP_CONFIG } from '@/config/app';
 
-const API_URL = 'https://api.eventop.xyz';
+const API_URL = APP_CONFIG.APP_URL || 'https://api.eventop.xyz';
 
 export const api = axios.create({
   baseURL: API_URL,
@@ -68,6 +68,12 @@ export interface MerchantPlan {
   description?: string;
   logoUrl?: string;
   category?: string;
+}
+
+export interface MerchantPublicInfo {
+  walletAddress: string;
+  companyName: string;
+  logoUrl?: string;
 }
 
 export interface SubscriptionResponse {
@@ -147,6 +153,19 @@ export const apiService = {
 
   getUserStats: async (wallet: string) => {
     const { data } = await api.get(`/subscriptions/user/${wallet}/stats`);
+    return data;
+  },
+
+  // New methods for merchant public info
+  getMerchantPublicInfo: async (walletAddress: string) => {
+    const { data } = await api.get<MerchantPublicInfo>(`/merchants/public/${walletAddress}/info`);
+    return data;
+  },
+
+  getBatchMerchantPublicInfo: async (walletAddresses: string[]) => {
+    const { data } = await api.post<MerchantPublicInfo[]>('/merchants/public/info/batch', {
+      walletAddresses,
+    });
     return data;
   },
 };
