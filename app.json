@@ -33,8 +33,6 @@
       "package": "dev.eventop.wallet"
     },
     "extra": {
-      "privyAppId": "cmi91u7ca00csl20dktx7r3cr",
-      "privyClientId": "client-WY6TC6KG4fD76kZaKeFdzimsWXyNSnRvgjMdeJS2H8p2d",
       "passkeyAssociatedDomain": "https://eventop.xyz",
       "router": {},
       "eas": {
@@ -64,15 +62,15 @@
         "androidIcons": {
             "help_icon": {
               "foregroundImage": "./assets/images/adaptive-icon-help.png",
-              "backgroundColor": "#29cfc1"
+              "backgroundColor": "#ffffff"
             },
             "add_funds_icon": {
               "foregroundImage": "./assets/images/adaptive-icon-add-funds.png",
-              "backgroundColor": "#29cfc1"
+              "backgroundColor": "#ffffff"
             },
             "subscriptions_icon": {
               "foregroundImage": "./assets/images/adaptive-icon-help-subscription.png",
-              "backgroundColor": "#29cfc1"
+              "backgroundColor": "#ffffff"
             }
           }
         }
