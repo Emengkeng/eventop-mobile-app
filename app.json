@@ -63,15 +63,15 @@
         {
         "androidIcons": {
             "help_icon": {
-              "foregroundImage": "./assets/images/adaptive-icon-help.svg",
+              "foregroundImage": "./assets/images/adaptive-icon-help.png",
               "backgroundColor": "#29cfc1"
             },
             "add_funds_icon": {
-              "foregroundImage": "./assets/images/adaptive-icon-add-funds.svg",
+              "foregroundImage": "./assets/images/adaptive-icon-add-funds.png",
               "backgroundColor": "#29cfc1"
             },
             "subscriptions_icon": {
-              "foregroundImage": "./assets/images/adaptive-icon-help-subscription.svg",
+              "foregroundImage": "./assets/images/adaptive-icon-help-subscription.png",
               "backgroundColor": "#29cfc1"
             }
           }
