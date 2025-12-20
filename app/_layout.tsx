@@ -7,9 +7,11 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { ActivityIndicator, View, StyleSheet, Linking } from 'react-native';
+import { ActivityIndicator, View, StyleSheet, Linking, Platform } from 'react-native';
 import { colors } from '@/theme/colors';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as QuickActions from 'expo-quick-actions';
+import { RouterAction, useQuickActionRouting } from 'expo-quick-actions/router';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,6 +23,7 @@ const queryClient = new QueryClient({
 });
 
 function RootNavigator() {
+  useQuickActionRouting();
   const { isReady, user, logout, getAccessToken } = usePrivy();
   const hydrate = useWalletStore((state) => state.hydrate);
   const segments = useSegments();
@@ -35,6 +38,40 @@ function RootNavigator() {
   useEffect(() => {
     hydrate();
   }, []);
+
+  useEffect(() => {
+    QuickActions.setItems<RouterAction>([
+      {
+        title: "Add Funds",
+        subtitle: "Top up your wallet",
+        icon: Platform.OS === "ios" ? "symbol:dollarsign.circle" : "add_funds_icon",
+        id: "add_funds",
+        params: { href: "./wallet/deposit" },
+      },
+      // {
+      //   title: "Browse Plans",
+      //   subtitle: "Discover subscriptions",
+      //   icon: "browse_icon",
+      //   id: "browse",
+      //   params: { href: "/subscriptions/browse" },
+      // },
+      {
+        title: "My Subscriptions",
+        subtitle: "Manage your plans",
+        icon: Platform.OS === "ios" ? "symbol:creditcard" : "subscriptions_icon",
+        id: "subscriptions",
+        params: { href: "./(tabs)/subscriptions" },
+      },
+      {
+        title: "Need Help?",
+        subtitle: "We're here for you",
+        icon: Platform.OS === "ios" ? "symbol:person.crop.circle.badge.questionmark" : "help_icon",
+        id: "help",
+        params: { href: "./help" },
+      },
+    ]);
+  }, []);
+
 
   useEffect(() => {
     const checkForFreshInstall = async () => {

@@ -57,7 +57,24 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-quick-actions",
+      {
+       "androidIcons": {
+          "help_icon": {
+            "foregroundImage": "./assets/images/adaptive-icon-help.svg",
+            "backgroundColor": "#29cfc1"
+          },
+          "add_funds_icon": {
+            "foregroundImage": "./assets/images/adaptive-icon-add-funds.svg",
+            "backgroundColor": "#29cfc1"
+          },
+          "subscriptions_icon": {
+            "foregroundImage": "./assets/images/adaptive-icon-help-subscription.svg",
+            "backgroundColor": "#29cfc1"
+          }
+        }
+      }
     ],
     "experiments": {
       "typedRoutes": true
